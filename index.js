@@ -11,7 +11,17 @@ const {
 const http = require("http");
 
 // =====================================================
-// RENDER
+// CONFIGURACIÓN
+// =====================================================
+
+const CLIENT_ID = "1552817688378605650";
+const TOKEN = process.env.DISCORD_TOKEN;
+
+// ID DEL ROL OWNER
+const OWNER_ROLE_ID = "1531489394127536188";
+
+// =====================================================
+// SERVIDOR PARA RENDER
 // =====================================================
 
 const PORT = process.env.PORT || 10000;
@@ -27,7 +37,7 @@ http.createServer((req, res) => {
 });
 
 // =====================================================
-// DISCORD
+// CLIENTE DISCORD
 // =====================================================
 
 const client = new Client({
@@ -35,9 +45,6 @@ const client = new Client({
         GatewayIntentBits.Guilds
     ]
 });
-
-const CLIENT_ID = "1552817688378605650";
-const TOKEN = process.env.DISCORD_TOKEN;
 
 // =====================================================
 // DURACIONES
@@ -60,7 +67,7 @@ function convertirDuracion(texto) {
         };
     }
 
-    const regex = /(\d+)(y|mo|w|d|h|m|s)/g;
+    const regex = /(\d+)(mo|y|w|d|h|m|s)/g;
 
     const unidades = {
         s: 1000,
@@ -167,7 +174,7 @@ const commands = [
             option
                 .setName("duracion")
                 .setDescription(
-                    "Ej: 30s, 5m, 1h, 24h, 7d, 2h30m"
+                    "Ej: 30s, 5m, 1h, 24h, 7d"
                 )
                 .setRequired(true)
         )
@@ -212,7 +219,7 @@ const commands = [
 ].map(command => command.toJSON());
 
 // =====================================================
-// REST
+// REGISTRO DE COMANDOS
 // =====================================================
 
 const rest = new REST({
@@ -241,7 +248,7 @@ async function registrarComandos() {
 }
 
 // =====================================================
-// READY
+// BOT READY
 // =====================================================
 
 client.once("clientReady", () => {
@@ -315,7 +322,7 @@ client.on("interactionCreate", async interaction => {
             if (!duracion) {
                 return interaction.reply({
                     content:
-                        "❌ Duración inválida. Ejemplos: `30s`, `5m`, `1h`, `24h`, `7d`, `2h30m`.",
+                        "❌ Duración inválida. Ejemplos: `30s`, `5m`, `1h`, `24h`, `7d`.",
                     ephemeral: true
                 });
             }
@@ -511,27 +518,23 @@ client.on("interactionCreate", async interaction => {
 
             if (!puedeUsar) {
 
-                const embed = new EmbedBuilder()
-                    .setColor(0xED4245)
-                    .setTitle("❌ SIN PERMISOS")
-                    .setDescription(
-                        "No tienes permisos para bloquear este canal."
-                    )
-                    .setFooter({
-                        text: "Bot creado por DEVLVDARKKIDD"
-                    });
-
                 return interaction.editReply({
-                    embeds: [embed]
+                    content:
+                        "❌ No tienes permisos para bloquear este canal.\n\nBot creado por DEVLVDARKKIDD"
                 });
             }
 
             const canal = interaction.channel;
-            const everyone =
-                interaction.guild.roles.everyone;
 
             const miembroBot =
                 interaction.guild.members.me;
+
+            if (!miembroBot) {
+                return interaction.editReply({
+                    content:
+                        "❌ No pude encontrar al bot dentro del servidor."
+                });
+            }
 
             const permisosBot =
                 canal.permissionsFor(miembroBot);
@@ -542,27 +545,72 @@ client.on("interactionCreate", async interaction => {
                     PermissionFlagsBits.ManageRoles
                 )
             ) {
-
                 return interaction.editReply({
                     content:
-                        "❌ El bot necesita **Gestionar roles** para bloquear los permisos del canal."
+                        "❌ El bot necesita el permiso **Gestionar roles**."
                 });
             }
 
-            /*
-             * IMPORTANTE:
-             *
-             * Bloqueamos SendMessages para @everyone.
-             *
-             * Discord aplica las reglas de permisos de canal
-             * junto con los roles. Los administradores mantienen
-             * acceso por Administrator.
-             */
+            // ---------------------------------------------
+            // BLOQUEAR @EVERYONE
+            // ---------------------------------------------
 
             await canal.permissionOverwrites.edit(
-                everyone,
+                interaction.guild.roles.everyone,
                 {
                     SendMessages: false
+                }
+            );
+
+            // ---------------------------------------------
+            // BLOQUEAR TODOS LOS ROLES DEL SERVIDOR
+            // EXCEPTO OWNER
+            // ---------------------------------------------
+
+            const roles = interaction.guild.roles.cache;
+
+            for (const [roleId, role] of roles) {
+
+                if (role.id === interaction.guild.id) {
+                    continue;
+                }
+
+                if (role.id === OWNER_ROLE_ID) {
+                    continue;
+                }
+
+                // Ignoramos @everyone
+                if (role.id === interaction.guild.roles.everyone.id) {
+                    continue;
+                }
+
+                try {
+
+                    await canal.permissionOverwrites.edit(
+                        role.id,
+                        {
+                            SendMessages: false
+                        }
+                    );
+
+                } catch (error) {
+
+                    console.error(
+                        `No se pudo modificar el rol ${role.name}:`,
+                        error.message
+                    );
+                }
+            }
+
+            // ---------------------------------------------
+            // PERMITIR AL ROL OWNER
+            // ---------------------------------------------
+
+            await canal.permissionOverwrites.edit(
+                OWNER_ROLE_ID,
+                {
+                    SendMessages: true,
+                    ViewChannel: true
                 }
             );
 
@@ -570,23 +618,20 @@ client.on("interactionCreate", async interaction => {
                 .setColor(0xED4245)
                 .setTitle("🔒 CANAL BLOQUEADO")
                 .setDescription(
-                    "El canal ha sido bloqueado correctamente."
+                    "El canal está bloqueado. Los usuarios pueden seguir viéndolo, pero no pueden enviar mensajes."
                 )
                 .addFields(
                     {
-                        name: "👤 Usuarios",
-                        value:
-                            "No pueden enviar mensajes."
+                        name: "👑 Acceso para escribir",
+                        value: "Solo el rol `『 𝐎𝐖𝐍𝐄𝐑 』`"
                     },
                     {
-                        name: "👑 Administradores",
-                        value:
-                            "Mantienen acceso."
+                        name: "👁️ Visibilidad",
+                        value: "Todos pueden ver el canal."
                     },
                     {
-                        name: "🛡️ Moderador",
-                        value:
-                            `${interaction.user}`
+                        name: "🛡️ Bloqueado por",
+                        value: `${interaction.user}`
                     }
                 )
                 .setFooter({
@@ -618,59 +663,67 @@ client.on("interactionCreate", async interaction => {
 
             if (!puedeUsar) {
 
-                const embed = new EmbedBuilder()
-                    .setColor(0xED4245)
-                    .setTitle("❌ SIN PERMISOS")
-                    .setDescription(
-                        "No tienes permisos para desbloquear este canal."
-                    )
-                    .setFooter({
-                        text: "Bot creado por DEVLVDARKKIDD"
-                    });
-
                 return interaction.editReply({
-                    embeds: [embed]
+                    content:
+                        "❌ No tienes permisos para desbloquear este canal.\n\nBot creado por DEVLVDARKKIDD"
                 });
             }
 
             const canal = interaction.channel;
-            const everyone =
-                interaction.guild.roles.everyone;
 
-            const miembroBot =
-                interaction.guild.members.me;
-
-            const permisosBot =
-                canal.permissionsFor(miembroBot);
-
-            if (
-                !permisosBot ||
-                !permisosBot.has(
-                    PermissionFlagsBits.ManageRoles
-                )
-            ) {
-
-                return interaction.editReply({
-                    content:
-                        "❌ El bot necesita **Gestionar roles** para desbloquear el canal."
-                });
-            }
+            // ---------------------------------------------
+            // QUITAR BLOQUEO DE @EVERYONE
+            // ---------------------------------------------
 
             await canal.permissionOverwrites.edit(
-                everyone,
+                interaction.guild.roles.everyone,
                 {
                     SendMessages: null
                 }
             );
 
+            // ---------------------------------------------
+            // QUITAR BLOQUEO DE TODOS LOS ROLES
+            // ---------------------------------------------
+
+            const roles = interaction.guild.roles.cache;
+
+            for (const [roleId, role] of roles) {
+
+                if (role.id === interaction.guild.id) {
+                    continue;
+                }
+
+                if (role.id === interaction.guild.roles.everyone.id) {
+                    continue;
+                }
+
+                try {
+
+                    await canal.permissionOverwrites.edit(
+                        roleId,
+                        {
+                            SendMessages: null
+                        }
+                    );
+
+                } catch (error) {
+
+                    console.error(
+                        `No se pudo restaurar el rol ${role.name}:`,
+                        error.message
+                    );
+                }
+            }
+
             const embed = new EmbedBuilder()
                 .setColor(0x57F287)
                 .setTitle("🔓 CANAL DESBLOQUEADO")
                 .setDescription(
-                    "El canal vuelve a estar disponible."
+                    "El canal vuelve a permitir el envío de mensajes."
                 )
                 .addFields({
-                    name: "🛡️ Moderador",
+                    name: "🛡️ Desbloqueado por",
                     value: `${interaction.user}`
                 })
                 .setFooter({
@@ -733,6 +786,7 @@ if (!TOKEN) {
     console.error(
         "❌ Falta DISCORD_TOKEN en las variables de entorno."
     );
+
     process.exit(1);
 }
 
