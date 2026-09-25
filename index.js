@@ -580,115 +580,162 @@ client.on("interactionCreate", async interaction => {
             return;
         }
 
-        // =================================================
-        // LOCK
-        // =================================================
+// =================================================
+// LOCK
+// =================================================
 
-        if (interaction.commandName === "lock") {
+if (interaction.commandName === "lock") {
 
-            const canal = interaction.channel;
+    const canal = interaction.channel;
 
-            await canal.permissionOverwrites.edit(
-                interaction.guild.roles.everyone,
-                {
-                    SendMessages: false
-                }
-            );
-
-            const embed = new EmbedBuilder()
-                .setColor(0xED4245)
-                .setTitle("🔒 CANAL BLOQUEADO")
-                .addFields(
-                    {
-                        name: "📁 Canal",
-                        value: `${canal}`,
-                        inline: false
-                    },
-                    {
-                        name: "🛡️ Moderador",
-                        value: `${interaction.user}`,
-                        inline: true
-                    }
-                )
-                .setFooter({
-                    text: "Bot creado por DEVLVDARKKIDD"
-                })
-                .setTimestamp();
-
-            await interaction.reply({
-                embeds: [embed]
-            });
-
-            return;
-        }
-
-        // =================================================
-        // UNLOCK
-        // =================================================
-
-        if (interaction.commandName === "unlock") {
-
-            const canal = interaction.channel;
-
-            await canal.permissionOverwrites.edit(
-                interaction.guild.roles.everyone,
-                {
-                    SendMessages: null
-                }
-            );
-
-            const embed = new EmbedBuilder()
-                .setColor(0x57F287)
-                .setTitle("🔓 CANAL DESBLOQUEADO")
-                .addFields(
-                    {
-                        name: "📁 Canal",
-                        value: `${canal}`,
-                        inline: false
-                    },
-                    {
-                        name: "🛡️ Moderador",
-                        value: `${interaction.user}`,
-                        inline: true
-                    }
-                )
-                .setFooter({
-                    text: "Bot creado por DEVLVDARKKIDD"
-                })
-                .setTimestamp();
-
-            await interaction.reply({
-                embeds: [embed]
-            });
-
-            return;
-        }
-
-    } catch (error) {
-
-        console.error(
-            "❌ Error procesando comando:",
-            error
-        );
-
-        if (
-            interaction.replied ||
-            interaction.deferred
-        ) {
-            await interaction.followUp({
-                content:
-                    "❌ Ocurrió un error al ejecutar el comando.",
-                ephemeral: true
-            }).catch(() => {});
-        } else {
-            await interaction.reply({
-                content:
-                    "❌ Ocurrió un error al ejecutar el comando.",
-                ephemeral: true
-            }).catch(() => {});
-        }
+    if (!canal) {
+        return interaction.reply({
+            content: "❌ No se pudo detectar el canal.",
+            ephemeral: true
+        });
     }
-});
+
+    const permisosBot = canal.permissionsFor(
+        interaction.guild.members.me
+    );
+
+    if (!permisosBot?.has(PermissionFlagsBits.ManageChannels)) {
+        return interaction.reply({
+            content:
+                "❌ No tengo el permiso **Gestionar canales**.",
+            ephemeral: true
+        });
+    }
+
+    // Bloquea a @everyone
+    await canal.permissionOverwrites.edit(
+        interaction.guild.roles.everyone,
+        {
+            SendMessages: false
+        }
+    );
+
+    // Permite escribir a usuarios con Administrador
+    // y Gestionar canales mediante sus permisos
+    const roles = interaction.guild.roles.cache.filter(role =>
+        role.permissions.has(PermissionFlagsBits.Administrator) ||
+        role.permissions.has(PermissionFlagsBits.ManageChannels)
+    );
+
+    for (const [, role] of roles) {
+        await canal.permissionOverwrites.edit(
+            role.id,
+            {
+                SendMessages: true
+            }
+        );
+    }
+
+    const embed = new EmbedBuilder()
+        .setColor(0xED4245)
+        .setTitle("🔒 CANAL BLOQUEADO")
+        .setDescription(
+            "El canal ha sido bloqueado para los usuarios normales."
+        )
+        .addFields(
+            {
+                name: "👑 Pueden escribir",
+                value:
+                    "Dueño del servidor\n" +
+                    "Usuarios con Administrador\n" +
+                    "Usuarios con Gestionar canales",
+                inline: false
+            },
+            {
+                name: "🛡️ Moderador",
+                value: `${interaction.user}`,
+                inline: true
+            }
+        )
+        .setFooter({
+            text: "Bot creado por DEVLVDARKKIDD"
+        })
+        .setTimestamp();
+
+    await interaction.reply({
+        embeds: [embed]
+    });
+
+    return;
+}
+
+// =================================================
+// UNLOCK
+// =================================================
+
+if (interaction.commandName === "unlock") {
+
+    const canal = interaction.channel;
+
+    if (!canal) {
+        return interaction.reply({
+            content: "❌ No se pudo detectar el canal.",
+            ephemeral: true
+        });
+    }
+
+    const permisosBot = canal.permissionsFor(
+        interaction.guild.members.me
+    );
+
+    if (!permisosBot?.has(PermissionFlagsBits.ManageChannels)) {
+        return interaction.reply({
+            content:
+                "❌ No tengo el permiso **Gestionar canales**.",
+            ephemeral: true
+        });
+    }
+
+    // Quita el bloqueo de @everyone
+    await canal.permissionOverwrites.edit(
+        interaction.guild.roles.everyone,
+        {
+            SendMessages: null
+        }
+    );
+
+    // Quita los permisos especiales creados por el lock
+    const roles = interaction.guild.roles.cache.filter(role =>
+        role.permissions.has(PermissionFlagsBits.Administrator) ||
+        role.permissions.has(PermissionFlagsBits.ManageChannels)
+    );
+
+    for (const [, role] of roles) {
+        await canal.permissionOverwrites.edit(
+            role.id,
+            {
+                SendMessages: null
+            }
+        );
+    }
+
+    const embed = new EmbedBuilder()
+        .setColor(0x57F287)
+        .setTitle("🔓 CANAL DESBLOQUEADO")
+        .setDescription(
+            "El canal vuelve a estar disponible para todos."
+        )
+        .addFields({
+            name: "🛡️ Moderador",
+            value: `${interaction.user}`,
+            inline: true
+        })
+        .setFooter({
+            text: "Bot creado por DEVLVDARKKIDD"
+        })
+        .setTimestamp();
+
+    await interaction.reply({
+        embeds: [embed]
+    });
+
+    return;
+}
 
 // =====================================================
 // INICIAR BOT
