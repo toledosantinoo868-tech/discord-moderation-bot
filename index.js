@@ -27,7 +27,7 @@ http.createServer((req, res) => {
 });
 
 // =====================================================
-// CLIENTE DISCORD
+// DISCORD
 // =====================================================
 
 const client = new Client({
@@ -35,10 +35,6 @@ const client = new Client({
         GatewayIntentBits.Guilds
     ]
 });
-
-// =====================================================
-// CONFIGURACIÓN
-// =====================================================
 
 const CLIENT_ID = "1552817688378605650";
 const TOKEN = process.env.DISCORD_TOKEN;
@@ -141,12 +137,10 @@ function formatearDuracion(ms) {
 
 const commands = [
 
-    // IP
     new SlashCommandBuilder()
         .setName("ip")
         .setDescription("Muestra la IP del servidor de Minecraft."),
 
-    // BAN
     new SlashCommandBuilder()
         .setName("ban")
         .setDescription("Banea a un usuario.")
@@ -160,7 +154,6 @@ const commands = [
             PermissionFlagsBits.BanMembers
         ),
 
-    // MUTE
     new SlashCommandBuilder()
         .setName("mute")
         .setDescription("Silencia temporalmente a un usuario.")
@@ -182,7 +175,6 @@ const commands = [
             PermissionFlagsBits.ModerateMembers
         ),
 
-    // UNMUTE
     new SlashCommandBuilder()
         .setName("unmute")
         .setDescription("Quita el silencio a un usuario.")
@@ -196,7 +188,6 @@ const commands = [
             PermissionFlagsBits.ModerateMembers
         ),
 
-    // UNBAN
     new SlashCommandBuilder()
         .setName("unban")
         .setDescription("Desbanea a un usuario mediante su ID.")
@@ -210,21 +201,13 @@ const commands = [
             PermissionFlagsBits.BanMembers
         ),
 
-    // LOCK
     new SlashCommandBuilder()
         .setName("lock")
-        .setDescription("Bloquea el canal actual.")
-        .setDefaultMemberPermissions(
-            PermissionFlagsBits.ManageChannels
-        ),
+        .setDescription("Bloquea el canal para los usuarios."),
 
-    // UNLOCK
     new SlashCommandBuilder()
         .setName("unlock")
-        .setDescription("Desbloquea el canal actual.")
-        .setDefaultMemberPermissions(
-            PermissionFlagsBits.ManageChannels
-        )
+        .setDescription("Desbloquea el canal.")
 
 ].map(command => command.toJSON());
 
@@ -235,10 +218,6 @@ const commands = [
 const rest = new REST({
     version: "10"
 }).setToken(TOKEN);
-
-// =====================================================
-// REGISTRAR COMANDOS
-// =====================================================
 
 async function registrarComandos() {
     try {
@@ -262,7 +241,7 @@ async function registrarComandos() {
 }
 
 // =====================================================
-// BOT READY
+// READY
 // =====================================================
 
 client.once("clientReady", () => {
@@ -282,7 +261,7 @@ client.on("interactionCreate", async interaction => {
     try {
 
         // =================================================
-        // /IP
+        // IP
         // =================================================
 
         if (interaction.commandName === "ip") {
@@ -296,13 +275,11 @@ client.on("interactionCreate", async interaction => {
                 .addFields(
                     {
                         name: "🌐 IP",
-                        value: "`mc.laordenmorada.lat`",
-                        inline: false
+                        value: "`mc.laordenmorada.lat`"
                     },
                     {
                         name: "🔌 PUERTO",
-                        value: "`19527`",
-                        inline: false
+                        value: "`19527`"
                     }
                 )
                 .setFooter({
@@ -316,7 +293,7 @@ client.on("interactionCreate", async interaction => {
         }
 
         // =================================================
-        // /MUTE
+        // MUTE
         // =================================================
 
         if (interaction.commandName === "mute") {
@@ -332,30 +309,13 @@ client.on("interactionCreate", async interaction => {
                     usuario.id
                 );
 
-            if (usuario.id === interaction.user.id) {
-                return interaction.reply({
-                    content:
-                        "❌ No puedes silenciarte a ti mismo.",
-                    ephemeral: true
-                });
-            }
-
-            if (usuario.id === interaction.guild.ownerId) {
-                return interaction.reply({
-                    content:
-                        "❌ No puedes silenciar al dueño del servidor.",
-                    ephemeral: true
-                });
-            }
-
             const duracion =
                 convertirDuracion(duracionTexto);
 
             if (!duracion) {
                 return interaction.reply({
                     content:
-                        "❌ Duración inválida.\n\n" +
-                        "Ejemplos: `30s`, `5m`, `1h`, `24h`, `7d`, `2h30m`.",
+                        "❌ Duración inválida. Ejemplos: `30s`, `5m`, `1h`, `24h`, `7d`, `2h30m`.",
                     ephemeral: true
                 });
             }
@@ -363,8 +323,7 @@ client.on("interactionCreate", async interaction => {
             if (duracion.permanente) {
                 return interaction.reply({
                     content:
-                        "⚠️ Discord no permite timeouts permanentes. " +
-                        "El máximo es de 28 días.",
+                        "⚠️ Discord no permite timeouts permanentes. El máximo es de 28 días.",
                     ephemeral: true
                 });
             }
@@ -375,7 +334,7 @@ client.on("interactionCreate", async interaction => {
             if (duracion.milisegundos > MAX_TIMEOUT) {
                 return interaction.reply({
                     content:
-                        "❌ El máximo permitido por Discord es de **28 días**.",
+                        "❌ El máximo permitido por Discord es de 28 días.",
                     ephemeral: true
                 });
             }
@@ -391,18 +350,15 @@ client.on("interactionCreate", async interaction => {
                 .addFields(
                     {
                         name: "👤 Usuario",
-                        value: `${usuario}`,
-                        inline: false
+                        value: `${usuario}`
                     },
                     {
                         name: "⏱️ Tiempo",
-                        value: duracion.texto,
-                        inline: true
+                        value: duracion.texto
                     },
                     {
                         name: "🛡️ Moderador",
-                        value: `${interaction.user}`,
-                        inline: true
+                        value: `${interaction.user}`
                     }
                 )
                 .setFooter({
@@ -416,7 +372,7 @@ client.on("interactionCreate", async interaction => {
         }
 
         // =================================================
-        // /UNMUTE
+        // UNMUTE
         // =================================================
 
         if (interaction.commandName === "unmute") {
@@ -440,13 +396,11 @@ client.on("interactionCreate", async interaction => {
                 .addFields(
                     {
                         name: "👤 Usuario",
-                        value: `${usuario}`,
-                        inline: false
+                        value: `${usuario}`
                     },
                     {
                         name: "🛡️ Moderador",
-                        value: `${interaction.user}`,
-                        inline: true
+                        value: `${interaction.user}`
                     }
                 )
                 .setFooter({
@@ -460,7 +414,7 @@ client.on("interactionCreate", async interaction => {
         }
 
         // =================================================
-        // /BAN
+        // BAN
         // =================================================
 
         if (interaction.commandName === "ban") {
@@ -484,13 +438,11 @@ client.on("interactionCreate", async interaction => {
                 .addFields(
                     {
                         name: "👤 Usuario",
-                        value: `${usuario}`,
-                        inline: false
+                        value: `${usuario}`
                     },
                     {
                         name: "🛡️ Moderador",
-                        value: `${interaction.user}`,
-                        inline: true
+                        value: `${interaction.user}`
                     }
                 )
                 .setFooter({
@@ -504,7 +456,7 @@ client.on("interactionCreate", async interaction => {
         }
 
         // =================================================
-        // /UNBAN
+        // UNBAN
         // =================================================
 
         if (interaction.commandName === "unban") {
@@ -523,13 +475,11 @@ client.on("interactionCreate", async interaction => {
                 .addFields(
                     {
                         name: "🆔 ID",
-                        value: id,
-                        inline: false
+                        value: id
                     },
                     {
                         name: "🛡️ Moderador",
-                        value: `${interaction.user}`,
-                        inline: true
+                        value: `${interaction.user}`
                     }
                 )
                 .setFooter({
@@ -543,15 +493,14 @@ client.on("interactionCreate", async interaction => {
         }
 
         // =================================================
-        // /LOCK
+        // LOCK
         // =================================================
 
         if (interaction.commandName === "lock") {
 
-            // Responder inmediatamente a Discord
             await interaction.deferReply();
 
-            const puedeBloquear =
+            const puedeUsar =
                 interaction.guild.ownerId === interaction.user.id ||
                 interaction.member.permissions.has(
                     PermissionFlagsBits.Administrator
@@ -560,7 +509,7 @@ client.on("interactionCreate", async interaction => {
                     PermissionFlagsBits.ManageChannels
                 );
 
-            if (!puedeBloquear) {
+            if (!puedeUsar) {
 
                 const embed = new EmbedBuilder()
                     .setColor(0xED4245)
@@ -570,8 +519,7 @@ client.on("interactionCreate", async interaction => {
                     )
                     .setFooter({
                         text: "Bot creado por DEVLVDARKKIDD"
-                    })
-                    .setTimestamp();
+                    });
 
                 return interaction.editReply({
                     embeds: [embed]
@@ -579,13 +527,8 @@ client.on("interactionCreate", async interaction => {
             }
 
             const canal = interaction.channel;
-
-            if (!canal) {
-                return interaction.editReply({
-                    content:
-                        "❌ No se pudo detectar el canal."
-                });
-            }
+            const everyone =
+                interaction.guild.roles.everyone;
 
             const miembroBot =
                 interaction.guild.members.me;
@@ -596,19 +539,28 @@ client.on("interactionCreate", async interaction => {
             if (
                 !permisosBot ||
                 !permisosBot.has(
-                    PermissionFlagsBits.ManageChannels
+                    PermissionFlagsBits.ManageRoles
                 )
             ) {
 
                 return interaction.editReply({
                     content:
-                        "❌ El bot no tiene **Gestionar canales** en este canal."
+                        "❌ El bot necesita **Gestionar roles** para bloquear los permisos del canal."
                 });
             }
 
-            // Bloquear únicamente a @everyone
+            /*
+             * IMPORTANTE:
+             *
+             * Bloqueamos SendMessages para @everyone.
+             *
+             * Discord aplica las reglas de permisos de canal
+             * junto con los roles. Los administradores mantienen
+             * acceso por Administrator.
+             */
+
             await canal.permissionOverwrites.edit(
-                interaction.guild.roles.everyone,
+                everyone,
                 {
                     SendMessages: false
                 }
@@ -618,25 +570,23 @@ client.on("interactionCreate", async interaction => {
                 .setColor(0xED4245)
                 .setTitle("🔒 CANAL BLOQUEADO")
                 .setDescription(
-                    "Este canal ha sido bloqueado correctamente."
+                    "El canal ha sido bloqueado correctamente."
                 )
                 .addFields(
                     {
-                        name: "🚫 Usuarios",
+                        name: "👤 Usuarios",
                         value:
-                            "Los usuarios normales no pueden enviar mensajes.",
-                        inline: false
+                            "No pueden enviar mensajes."
                     },
                     {
-                        name: "👑 Administración",
+                        name: "👑 Administradores",
                         value:
-                            "Los administradores conservan el acceso.",
-                        inline: false
+                            "Mantienen acceso."
                     },
                     {
                         name: "🛡️ Moderador",
-                        value: `${interaction.user}`,
-                        inline: false
+                        value:
+                            `${interaction.user}`
                     }
                 )
                 .setFooter({
@@ -650,15 +600,14 @@ client.on("interactionCreate", async interaction => {
         }
 
         // =================================================
-        // /UNLOCK
+        // UNLOCK
         // =================================================
 
         if (interaction.commandName === "unlock") {
 
-            // Responder inmediatamente a Discord
             await interaction.deferReply();
 
-            const puedeDesbloquear =
+            const puedeUsar =
                 interaction.guild.ownerId === interaction.user.id ||
                 interaction.member.permissions.has(
                     PermissionFlagsBits.Administrator
@@ -667,7 +616,7 @@ client.on("interactionCreate", async interaction => {
                     PermissionFlagsBits.ManageChannels
                 );
 
-            if (!puedeDesbloquear) {
+            if (!puedeUsar) {
 
                 const embed = new EmbedBuilder()
                     .setColor(0xED4245)
@@ -677,8 +626,7 @@ client.on("interactionCreate", async interaction => {
                     )
                     .setFooter({
                         text: "Bot creado por DEVLVDARKKIDD"
-                    })
-                    .setTimestamp();
+                    });
 
                 return interaction.editReply({
                     embeds: [embed]
@@ -686,13 +634,8 @@ client.on("interactionCreate", async interaction => {
             }
 
             const canal = interaction.channel;
-
-            if (!canal) {
-                return interaction.editReply({
-                    content:
-                        "❌ No se pudo detectar el canal."
-                });
-            }
+            const everyone =
+                interaction.guild.roles.everyone;
 
             const miembroBot =
                 interaction.guild.members.me;
@@ -703,19 +646,18 @@ client.on("interactionCreate", async interaction => {
             if (
                 !permisosBot ||
                 !permisosBot.has(
-                    PermissionFlagsBits.ManageChannels
+                    PermissionFlagsBits.ManageRoles
                 )
             ) {
 
                 return interaction.editReply({
                     content:
-                        "❌ El bot no tiene **Gestionar canales** en este canal."
+                        "❌ El bot necesita **Gestionar roles** para desbloquear el canal."
                 });
             }
 
-            // Quitar el bloqueo de @everyone
             await canal.permissionOverwrites.edit(
-                interaction.guild.roles.everyone,
+                everyone,
                 {
                     SendMessages: null
                 }
@@ -725,12 +667,11 @@ client.on("interactionCreate", async interaction => {
                 .setColor(0x57F287)
                 .setTitle("🔓 CANAL DESBLOQUEADO")
                 .setDescription(
-                    "Este canal vuelve a estar disponible para todos."
+                    "El canal vuelve a estar disponible."
                 )
                 .addFields({
                     name: "🛡️ Moderador",
-                    value: `${interaction.user}`,
-                    inline: false
+                    value: `${interaction.user}`
                 })
                 .setFooter({
                     text: "Bot creado por DEVLVDARKKIDD"
@@ -751,7 +692,7 @@ client.on("interactionCreate", async interaction => {
 
         const mensaje =
             error.code === 50013
-                ? "❌ Discord rechazó la acción por falta de permisos. Revisá que el bot tenga **Gestionar canales** en este canal."
+                ? "❌ Discord rechazó la acción por falta de permisos."
                 : `❌ Ocurrió un error: \`${error.message || "Error desconocido"}\``;
 
         try {
@@ -785,21 +726,15 @@ client.on("interactionCreate", async interaction => {
 });
 
 // =====================================================
-// TOKEN
+// INICIO
 // =====================================================
 
 if (!TOKEN) {
-
     console.error(
         "❌ Falta DISCORD_TOKEN en las variables de entorno."
     );
-
     process.exit(1);
 }
-
-// =====================================================
-// INICIAR
-// =====================================================
 
 registrarComandos();
 
