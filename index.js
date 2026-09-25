@@ -11,7 +11,7 @@ const {
 const http = require("http");
 
 // =====================================================
-// SERVIDOR HTTP PARA RENDER
+// RENDER - SERVIDOR HTTP
 // =====================================================
 
 const PORT = process.env.PORT || 3000;
@@ -150,18 +150,12 @@ function formatearDuracion(ms) {
 
 const commands = [
 
-    // =================================================
-    // IP - TODOS PUEDEN USARLO
-    // =================================================
-
+    // /IP - PÚBLICO
     new SlashCommandBuilder()
         .setName("ip")
         .setDescription("Muestra la IP del servidor de Minecraft."),
 
-    // =================================================
-    // BAN - SOLO MODERADORES
-    // =================================================
-
+    // /BAN
     new SlashCommandBuilder()
         .setName("ban")
         .setDescription("Banea a un usuario.")
@@ -181,10 +175,7 @@ const commands = [
             PermissionFlagsBits.BanMembers
         ),
 
-    // =================================================
-    // MUTE - SOLO MODERADORES
-    // =================================================
-
+    // /MUTE
     new SlashCommandBuilder()
         .setName("mute")
         .setDescription("Silencia a un usuario.")
@@ -206,10 +197,7 @@ const commands = [
             PermissionFlagsBits.ModerateMembers
         ),
 
-    // =================================================
-    // UNMUTE - SOLO MODERADORES
-    // =================================================
-
+    // /UNMUTE
     new SlashCommandBuilder()
         .setName("unmute")
         .setDescription("Quita el silencio a un usuario.")
@@ -223,10 +211,7 @@ const commands = [
             PermissionFlagsBits.ModerateMembers
         ),
 
-    // =================================================
-    // UNBAN - SOLO MODERADORES
-    // =================================================
-
+    // /UNBAN
     new SlashCommandBuilder()
         .setName("unban")
         .setDescription("Desbanea a un usuario mediante su ID.")
@@ -240,10 +225,7 @@ const commands = [
             PermissionFlagsBits.BanMembers
         ),
 
-    // =================================================
-    // LOCK - SOLO MODERADORES
-    // =================================================
-
+    // /LOCK
     new SlashCommandBuilder()
         .setName("lock")
         .setDescription("Bloquea el canal actual.")
@@ -251,10 +233,7 @@ const commands = [
             PermissionFlagsBits.ManageChannels
         ),
 
-    // =================================================
-    // UNLOCK - SOLO MODERADORES
-    // =================================================
-
+    // /UNLOCK
     new SlashCommandBuilder()
         .setName("unlock")
         .setDescription("Desbloquea el canal actual.")
@@ -273,7 +252,9 @@ const rest = new REST({
 }).setToken(TOKEN);
 
 async function registrarComandos() {
+
     try {
+
         console.log("Registrando comandos...");
 
         await rest.put(
@@ -286,6 +267,7 @@ async function registrarComandos() {
         console.log("✅ Comandos registrados correctamente.");
 
     } catch (error) {
+
         console.error(
             "❌ Error registrando comandos:",
             error
@@ -298,9 +280,11 @@ async function registrarComandos() {
 // =====================================================
 
 client.once("clientReady", () => {
+
     console.log(
         `✅ Bot conectado como ${client.user.tag}`
     );
+
 });
 
 // =====================================================
@@ -309,12 +293,14 @@ client.once("clientReady", () => {
 
 client.on("interactionCreate", async interaction => {
 
-    if (!interaction.isChatInputCommand()) return;
+    if (!interaction.isChatInputCommand()) {
+        return;
+    }
 
     try {
 
         // =================================================
-        // IP
+        // /IP
         // =================================================
 
         if (interaction.commandName === "ip") {
@@ -322,6 +308,9 @@ client.on("interactionCreate", async interaction => {
             const embed = new EmbedBuilder()
                 .setColor(0x57F287)
                 .setTitle("🎮 SERVIDOR DE MINECRAFT")
+                .setDescription(
+                    "Conectate al servidor usando estos datos:"
+                )
                 .addFields(
                     {
                         name: "🌐 IP",
@@ -347,7 +336,7 @@ client.on("interactionCreate", async interaction => {
         }
 
         // =================================================
-        // MUTE
+        // /MUTE
         // =================================================
 
         if (interaction.commandName === "mute") {
@@ -364,50 +353,60 @@ client.on("interactionCreate", async interaction => {
                 );
 
             if (usuario.id === interaction.user.id) {
+
                 return interaction.reply({
                     content:
                         "❌ No puedes silenciarte a ti mismo.",
                     ephemeral: true
                 });
+
             }
 
             if (usuario.id === interaction.guild.ownerId) {
+
                 return interaction.reply({
                     content:
                         "❌ No puedes silenciar al dueño del servidor.",
                     ephemeral: true
                 });
+
             }
 
             const duracion =
                 convertirDuracion(duracionTexto);
 
             if (!duracion) {
+
                 return interaction.reply({
                     content:
                         "❌ Duración inválida.\n\n" +
                         "Ejemplos: `30s`, `5m`, `1h`, `24h`, `7d`, `2h30m` o `1d12h`.",
                     ephemeral: true
                 });
+
             }
 
             if (duracion.permanente) {
+
                 return interaction.reply({
                     content:
-                        "⚠️ El timeout de Discord tiene un máximo de 28 días.",
+                        "⚠️ Discord permite un máximo de 28 días para los timeouts.",
                     ephemeral: true
                 });
+
             }
 
             const MAX_TIMEOUT =
                 28 * 24 * 60 * 60 * 1000;
 
             if (duracion.milisegundos > MAX_TIMEOUT) {
+
                 return interaction.reply({
                     content:
                         "❌ El máximo permitido por Discord es de **28 días**.",
                     ephemeral: true
                 });
+
             }
 
             await miembro.timeout(
@@ -448,7 +447,7 @@ client.on("interactionCreate", async interaction => {
         }
 
         // =================================================
-        // UNMUTE
+        // /UNMUTE
         // =================================================
 
         if (interaction.commandName === "unmute") {
@@ -494,7 +493,7 @@ client.on("interactionCreate", async interaction => {
         }
 
         // =================================================
-        // BAN
+        // /BAN
         // =================================================
 
         if (interaction.commandName === "ban") {
@@ -540,7 +539,7 @@ client.on("interactionCreate", async interaction => {
         }
 
         // =================================================
-        // UNBAN
+        // /UNBAN
         // =================================================
 
         if (interaction.commandName === "unban") {
@@ -580,165 +579,349 @@ client.on("interactionCreate", async interaction => {
             return;
         }
 
-// =================================================
-// LOCK
-// =================================================
+        // =================================================
+        // /LOCK
+        // =================================================
 
-if (interaction.commandName === "lock") {
+        if (interaction.commandName === "lock") {
 
-    const canal = interaction.channel;
+            // ---------------------------------------------
+            // COMPROBAR PERMISOS DEL USUARIO
+            // ---------------------------------------------
 
-    if (!canal) {
-        return interaction.reply({
-            content: "❌ No se pudo detectar el canal.",
-            ephemeral: true
-        });
-    }
+            const puedeBloquear =
+                interaction.guild.ownerId === interaction.user.id ||
+                interaction.member.permissions.has(
+                    PermissionFlagsBits.Administrator
+                ) ||
+                interaction.member.permissions.has(
+                    PermissionFlagsBits.ManageChannels
+                );
 
-    const permisosBot = canal.permissionsFor(
-        interaction.guild.members.me
-    );
+            if (!puedeBloquear) {
 
-    if (!permisosBot?.has(PermissionFlagsBits.ManageChannels)) {
-        return interaction.reply({
-            content:
-                "❌ No tengo el permiso **Gestionar canales**.",
-            ephemeral: true
-        });
-    }
+                const embed = new EmbedBuilder()
+                    .setColor(0xED4245)
+                    .setTitle("❌ SIN PERMISOS")
+                    .setDescription(
+                        "No tienes permisos para bloquear este canal."
+                    )
+                    .setFooter({
+                        text: "Bot creado por DEVLVDARKKIDD"
+                    })
+                    .setTimestamp();
 
-    // Bloquea a @everyone
-    await canal.permissionOverwrites.edit(
-        interaction.guild.roles.everyone,
-        {
-            SendMessages: false
+                return interaction.reply({
+                    embeds: [embed],
+                    ephemeral: true
+                });
+            }
+
+            const canal = interaction.channel;
+
+            if (!canal) {
+
+                return interaction.reply({
+                    content:
+                        "❌ No se pudo detectar el canal.",
+                    ephemeral: true
+                });
+            }
+
+            // ---------------------------------------------
+            // COMPROBAR PERMISOS DEL BOT
+            // ---------------------------------------------
+
+            const miembroBot =
+                interaction.guild.members.me;
+
+            const permisosBot =
+                canal.permissionsFor(miembroBot);
+
+            if (
+                !permisosBot ||
+                !permisosBot.has(
+                    PermissionFlagsBits.ManageChannels
+                )
+            ) {
+
+                const embed = new EmbedBuilder()
+                    .setColor(0xED4245)
+                    .setTitle("❌ EL BOT NO TIENE PERMISOS")
+                    .setDescription(
+                        "Necesito el permiso **Gestionar canales** para bloquear este canal."
+                    )
+                    .setFooter({
+                        text: "Bot creado por DEVLVDARKKIDD"
+                    })
+                    .setTimestamp();
+
+                return interaction.reply({
+                    embeds: [embed],
+                    ephemeral: true
+                });
+            }
+
+            // ---------------------------------------------
+            // BLOQUEAR @EVERYONE
+            // ---------------------------------------------
+
+            await canal.permissionOverwrites.edit(
+                interaction.guild.roles.everyone,
+                {
+                    SendMessages: false
+                }
+            );
+
+            // ---------------------------------------------
+            // PERMITIR ADMINISTRADORES Y
+            // GESTIONAR CANALES
+            // ---------------------------------------------
+
+            const rolesEspeciales =
+                interaction.guild.roles.cache.filter(role =>
+                    role.permissions.has(
+                        PermissionFlagsBits.Administrator
+                    ) ||
+                    role.permissions.has(
+                        PermissionFlagsBits.ManageChannels
+                    )
+                );
+
+            for (const [, role] of rolesEspeciales) {
+
+                await canal.permissionOverwrites.edit(
+                    role.id,
+                    {
+                        SendMessages: true
+                    }
+                );
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor(0xED4245)
+                .setTitle("🔒 CANAL BLOQUEADO")
+                .setDescription(
+                    "Este canal ha sido bloqueado correctamente."
+                )
+                .addFields(
+                    {
+                        name: "🚫 Usuarios normales",
+                        value:
+                            "No pueden enviar mensajes.",
+                        inline: false
+                    },
+                    {
+                        name: "👑 Pueden escribir",
+                        value:
+                            "Dueño del servidor\n" +
+                            "Administradores\n" +
+                            "Usuarios con Gestionar canales",
+                        inline: false
+                    },
+                    {
+                        name: "🛡️ Moderador",
+                        value: `${interaction.user}`,
+                        inline: false
+                    }
+                )
+                .setFooter({
+                    text: "Bot creado por DEVLVDARKKIDD"
+                })
+                .setTimestamp();
+
+            await interaction.reply({
+                embeds: [embed]
+            });
+
+            return;
         }
-    );
 
-    // Permite escribir a usuarios con Administrador
-    // y Gestionar canales mediante sus permisos
-    const roles = interaction.guild.roles.cache.filter(role =>
-        role.permissions.has(PermissionFlagsBits.Administrator) ||
-        role.permissions.has(PermissionFlagsBits.ManageChannels)
-    );
+        // =================================================
+        // /UNLOCK
+        // =================================================
 
-    for (const [, role] of roles) {
-        await canal.permissionOverwrites.edit(
-            role.id,
-            {
-                SendMessages: true
+        if (interaction.commandName === "unlock") {
+
+            // ---------------------------------------------
+            // COMPROBAR PERMISOS DEL USUARIO
+            // ---------------------------------------------
+
+            const puedeDesbloquear =
+                interaction.guild.ownerId === interaction.user.id ||
+                interaction.member.permissions.has(
+                    PermissionFlagsBits.Administrator
+                ) ||
+                interaction.member.permissions.has(
+                    PermissionFlagsBits.ManageChannels
+                );
+
+            if (!puedeDesbloquear) {
+
+                const embed = new EmbedBuilder()
+                    .setColor(0xED4245)
+                    .setTitle("❌ SIN PERMISOS")
+                    .setDescription(
+                        "No tienes permisos para desbloquear este canal."
+                    )
+                    .setFooter({
+                        text: "Bot creado por DEVLVDARKKIDD"
+                    })
+                    .setTimestamp();
+
+                return interaction.reply({
+                    embeds: [embed],
+                    ephemeral: true
+                });
             }
-        );
-    }
 
-    const embed = new EmbedBuilder()
-        .setColor(0xED4245)
-        .setTitle("🔒 CANAL BLOQUEADO")
-        .setDescription(
-            "El canal ha sido bloqueado para los usuarios normales."
-        )
-        .addFields(
-            {
-                name: "👑 Pueden escribir",
-                value:
-                    "Dueño del servidor\n" +
-                    "Usuarios con Administrador\n" +
-                    "Usuarios con Gestionar canales",
-                inline: false
-            },
-            {
-                name: "🛡️ Moderador",
-                value: `${interaction.user}`,
-                inline: true
+            const canal = interaction.channel;
+
+            if (!canal) {
+
+                return interaction.reply({
+                    content:
+                        "❌ No se pudo detectar el canal.",
+                    ephemeral: true
+                });
             }
-        )
-        .setFooter({
-            text: "Bot creado por DEVLVDARKKIDD"
-        })
-        .setTimestamp();
 
-    await interaction.reply({
-        embeds: [embed]
-    });
+            // ---------------------------------------------
+            // COMPROBAR PERMISOS DEL BOT
+            // ---------------------------------------------
 
-    return;
-}
+            const miembroBot =
+                interaction.guild.members.me;
 
-// =================================================
-// UNLOCK
-// =================================================
+            const permisosBot =
+                canal.permissionsFor(miembroBot);
 
-if (interaction.commandName === "unlock") {
+            if (
+                !permisosBot ||
+                !permisosBot.has(
+                    PermissionFlagsBits.ManageChannels
+                )
+            ) {
 
-    const canal = interaction.channel;
+                const embed = new EmbedBuilder()
+                    .setColor(0xED4245)
+                    .setTitle("❌ EL BOT NO TIENE PERMISOS")
+                    .setDescription(
+                        "Necesito el permiso **Gestionar canales** para desbloquear este canal."
+                    )
+                    .setFooter({
+                        text: "Bot creado por DEVLVDARKKIDD"
+                    })
+                    .setTimestamp();
 
-    if (!canal) {
-        return interaction.reply({
-            content: "❌ No se pudo detectar el canal.",
-            ephemeral: true
-        });
-    }
+                return interaction.reply({
+                    embeds: [embed],
+                    ephemeral: true
+                });
+            }
 
-    const permisosBot = canal.permissionsFor(
-        interaction.guild.members.me
-    );
+            // ---------------------------------------------
+            // DESBLOQUEAR @EVERYONE
+            // ---------------------------------------------
 
-    if (!permisosBot?.has(PermissionFlagsBits.ManageChannels)) {
-        return interaction.reply({
-            content:
-                "❌ No tengo el permiso **Gestionar canales**.",
-            ephemeral: true
-        });
-    }
+            await canal.permissionOverwrites.edit(
+                interaction.guild.roles.everyone,
+                {
+                    SendMessages: null
+                }
+            );
 
-    // Quita el bloqueo de @everyone
-    await canal.permissionOverwrites.edit(
-        interaction.guild.roles.everyone,
-        {
-            SendMessages: null
+            // ---------------------------------------------
+            // QUITAR PERMISOS ESPECIALES CREADOS
+            // ---------------------------------------------
+
+            const rolesEspeciales =
+                interaction.guild.roles.cache.filter(role =>
+                    role.permissions.has(
+                        PermissionFlagsBits.Administrator
+                    ) ||
+                    role.permissions.has(
+                        PermissionFlagsBits.ManageChannels
+                    )
+                );
+
+            for (const [, role] of rolesEspeciales) {
+
+                await canal.permissionOverwrites.edit(
+                    role.id,
+                    {
+                        SendMessages: null
+                    }
+                );
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor(0x57F287)
+                .setTitle("🔓 CANAL DESBLOQUEADO")
+                .setDescription(
+                    "Este canal vuelve a estar disponible para todos."
+                )
+                .addFields({
+                    name: "🛡️ Moderador",
+                    value: `${interaction.user}`,
+                    inline: false
+                })
+                .setFooter({
+                    text: "Bot creado por DEVLVDARKKIDD"
+                })
+                .setTimestamp();
+
+            await interaction.reply({
+                embeds: [embed]
+            });
+
+            return;
         }
-    );
 
-    // Quita los permisos especiales creados por el lock
-    const roles = interaction.guild.roles.cache.filter(role =>
-        role.permissions.has(PermissionFlagsBits.Administrator) ||
-        role.permissions.has(PermissionFlagsBits.ManageChannels)
-    );
+    } catch (error) {
 
-    for (const [, role] of roles) {
-        await canal.permissionOverwrites.edit(
-            role.id,
-            {
-                SendMessages: null
-            }
+        console.error(
+            "❌ ERROR DEL COMANDO:",
+            error
         );
+
+        let mensaje;
+
+        if (error.code === 50013) {
+
+            mensaje =
+                "❌ Discord rechazó la acción por falta de permisos.\n" +
+                "Revisá que el bot tenga **Gestionar canales**.";
+
+        } else {
+
+            mensaje =
+                "❌ Ocurrió un error al ejecutar el comando.\n" +
+                `\`${error.message || "Error desconocido"}\``;
+        }
+
+        if (
+            interaction.replied ||
+            interaction.deferred
+        ) {
+
+            await interaction.followUp({
+                content: mensaje,
+                ephemeral: true
+            }).catch(() => {});
+
+        } else {
+
+            await interaction.reply({
+                content: mensaje,
+                ephemeral: true
+            }).catch(() => {});
+        }
     }
-
-    const embed = new EmbedBuilder()
-        .setColor(0x57F287)
-        .setTitle("🔓 CANAL DESBLOQUEADO")
-        .setDescription(
-            "El canal vuelve a estar disponible para todos."
-        )
-        .addFields({
-            name: "🛡️ Moderador",
-            value: `${interaction.user}`,
-            inline: true
-        })
-        .setFooter({
-            text: "Bot creado por DEVLVDARKKIDD"
-        })
-        .setTimestamp();
-
-    await interaction.reply({
-        embeds: [embed]
-    });
-
-    return;
-}
+});
 
 // =====================================================
-// INICIAR BOT
+// COMPROBAR TOKEN
 // =====================================================
 
 if (!TOKEN) {
@@ -749,6 +932,10 @@ if (!TOKEN) {
 
     process.exit(1);
 }
+
+// =====================================================
+// INICIAR
+// =====================================================
 
 registrarComandos();
 
