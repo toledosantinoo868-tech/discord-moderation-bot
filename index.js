@@ -34,9 +34,7 @@ server.listen(PORT, "0.0.0.0", () => {
 
 const client = new Client({
     intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
+        GatewayIntentBits.Guilds
     ]
 });
 
@@ -152,7 +150,18 @@ function formatearDuracion(ms) {
 
 const commands = [
 
-    // BAN
+    // =================================================
+    // IP - TODOS PUEDEN USARLO
+    // =================================================
+
+    new SlashCommandBuilder()
+        .setName("ip")
+        .setDescription("Muestra la IP del servidor de Minecraft."),
+
+    // =================================================
+    // BAN - SOLO MODERADORES
+    // =================================================
+
     new SlashCommandBuilder()
         .setName("ban")
         .setDescription("Banea a un usuario.")
@@ -172,7 +181,10 @@ const commands = [
             PermissionFlagsBits.BanMembers
         ),
 
-    // MUTE
+    // =================================================
+    // MUTE - SOLO MODERADORES
+    // =================================================
+
     new SlashCommandBuilder()
         .setName("mute")
         .setDescription("Silencia a un usuario.")
@@ -194,7 +206,10 @@ const commands = [
             PermissionFlagsBits.ModerateMembers
         ),
 
-    // UNMUTE
+    // =================================================
+    // UNMUTE - SOLO MODERADORES
+    // =================================================
+
     new SlashCommandBuilder()
         .setName("unmute")
         .setDescription("Quita el silencio a un usuario.")
@@ -208,7 +223,10 @@ const commands = [
             PermissionFlagsBits.ModerateMembers
         ),
 
-    // UNBAN
+    // =================================================
+    // UNBAN - SOLO MODERADORES
+    // =================================================
+
     new SlashCommandBuilder()
         .setName("unban")
         .setDescription("Desbanea a un usuario mediante su ID.")
@@ -222,7 +240,10 @@ const commands = [
             PermissionFlagsBits.BanMembers
         ),
 
-    // LOCK
+    // =================================================
+    // LOCK - SOLO MODERADORES
+    // =================================================
+
     new SlashCommandBuilder()
         .setName("lock")
         .setDescription("Bloquea el canal actual.")
@@ -230,7 +251,10 @@ const commands = [
             PermissionFlagsBits.ManageChannels
         ),
 
-    // UNLOCK
+    // =================================================
+    // UNLOCK - SOLO MODERADORES
+    // =================================================
+
     new SlashCommandBuilder()
         .setName("unlock")
         .setDescription("Desbloquea el canal actual.")
@@ -280,44 +304,6 @@ client.once("clientReady", () => {
 });
 
 // =====================================================
-// !IP
-// =====================================================
-
-client.on("messageCreate", async message => {
-
-    if (message.author.bot) return;
-
-    if (
-        message.content.toLowerCase().trim() === "!ip"
-    ) {
-
-        const embed = new EmbedBuilder()
-            .setColor(0x57F287)
-            .setTitle("🎮 SERVIDOR DE MINECRAFT")
-            .addFields(
-                {
-                    name: "🌐 IP",
-                    value: "`mc.laordenmorada.lat`",
-                    inline: false
-                },
-                {
-                    name: "🔌 PUERTO",
-                    value: "`19527`",
-                    inline: false
-                }
-            )
-            .setFooter({
-                text: "Bot creado por DEVLVDARKKIDD"
-            })
-            .setTimestamp();
-
-        await message.reply({
-            embeds: [embed]
-        });
-    }
-});
-
-// =====================================================
 // INTERACCIONES
 // =====================================================
 
@@ -326,6 +312,39 @@ client.on("interactionCreate", async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
     try {
+
+        // =================================================
+        // IP
+        // =================================================
+
+        if (interaction.commandName === "ip") {
+
+            const embed = new EmbedBuilder()
+                .setColor(0x57F287)
+                .setTitle("🎮 SERVIDOR DE MINECRAFT")
+                .addFields(
+                    {
+                        name: "🌐 IP",
+                        value: "`mc.laordenmorada.lat`",
+                        inline: false
+                    },
+                    {
+                        name: "🔌 PUERTO",
+                        value: "`19527`",
+                        inline: false
+                    }
+                )
+                .setFooter({
+                    text: "Bot creado por DEVLVDARKKIDD"
+                })
+                .setTimestamp();
+
+            await interaction.reply({
+                embeds: [embed]
+            });
+
+            return;
+        }
 
         // =================================================
         // MUTE
@@ -344,14 +363,6 @@ client.on("interactionCreate", async interaction => {
                     usuario.id
                 );
 
-            if (!miembro) {
-                return interaction.reply({
-                    content:
-                        "❌ No pude encontrar a ese usuario.",
-                    ephemeral: true
-                });
-            }
-
             if (usuario.id === interaction.user.id) {
                 return interaction.reply({
                     content:
@@ -360,7 +371,7 @@ client.on("interactionCreate", async interaction => {
                 });
             }
 
-            if (interaction.guild.ownerId === usuario.id) {
+            if (usuario.id === interaction.guild.ownerId) {
                 return interaction.reply({
                     content:
                         "❌ No puedes silenciar al dueño del servidor.",
@@ -383,8 +394,7 @@ client.on("interactionCreate", async interaction => {
             if (duracion.permanente) {
                 return interaction.reply({
                     content:
-                        "⚠️ El timeout de Discord tiene un máximo de 28 días. " +
-                        "Para mute permanente necesitamos un sistema de rol `Muted`.",
+                        "⚠️ El timeout de Discord tiene un máximo de 28 días.",
                     ephemeral: true
                 });
             }
@@ -426,8 +436,7 @@ client.on("interactionCreate", async interaction => {
                     }
                 )
                 .setFooter({
-                    text:
-                        "Bot creado por DEVLVDARKKIDD"
+                    text: "Bot creado por DEVLVDARKKIDD"
                 })
                 .setTimestamp();
 
@@ -473,8 +482,7 @@ client.on("interactionCreate", async interaction => {
                     }
                 )
                 .setFooter({
-                    text:
-                        "Bot creado por DEVLVDARKKIDD"
+                    text: "Bot creado por DEVLVDARKKIDD"
                 })
                 .setTimestamp();
 
@@ -520,8 +528,7 @@ client.on("interactionCreate", async interaction => {
                     }
                 )
                 .setFooter({
-                    text:
-                        "Bot creado por DEVLVDARKKIDD"
+                    text: "Bot creado por DEVLVDARKKIDD"
                 })
                 .setTimestamp();
 
@@ -562,8 +569,7 @@ client.on("interactionCreate", async interaction => {
                     }
                 )
                 .setFooter({
-                    text:
-                        "Bot creado por DEVLVDARKKIDD"
+                    text: "Bot creado por DEVLVDARKKIDD"
                 })
                 .setTimestamp();
 
@@ -605,8 +611,7 @@ client.on("interactionCreate", async interaction => {
                     }
                 )
                 .setFooter({
-                    text:
-                        "Bot creado por DEVLVDARKKIDD"
+                    text: "Bot creado por DEVLVDARKKIDD"
                 })
                 .setTimestamp();
 
@@ -648,8 +653,7 @@ client.on("interactionCreate", async interaction => {
                     }
                 )
                 .setFooter({
-                    text:
-                        "Bot creado por DEVLVDARKKIDD"
+                    text: "Bot creado por DEVLVDARKKIDD"
                 })
                 .setTimestamp();
 
@@ -671,15 +675,12 @@ client.on("interactionCreate", async interaction => {
             interaction.replied ||
             interaction.deferred
         ) {
-
             await interaction.followUp({
                 content:
                     "❌ Ocurrió un error al ejecutar el comando.",
                 ephemeral: true
             }).catch(() => {});
-
         } else {
-
             await interaction.reply({
                 content:
                     "❌ Ocurrió un error al ejecutar el comando.",
