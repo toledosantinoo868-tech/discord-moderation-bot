@@ -5,7 +5,8 @@ const {
     Routes,
     SlashCommandBuilder,
     PermissionFlagsBits,
-    EmbedBuilder
+    EmbedBuilder,
+    Partials
 } = require("discord.js");
 
 const http = require("http");
@@ -18,9 +19,7 @@ const CLIENT_ID = "1552817688378605650";
 const TOKEN = process.env.DISCORD_TOKEN;
 
 const OWNER_ROLE_ID = "1531489394127536188";
-
 const WELCOME_CHANNEL_ID = "1531493723840450580";
-
 const LOG_CHANNEL_ID = "1544504719047917610";
 
 // =====================================================
@@ -47,9 +46,48 @@ const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent
+    ],
+    partials: [
+        Partials.Message,
+        Partials.Channel
     ]
 });
+
+// =====================================================
+// CACHE DE MENSAJES
+// =====================================================
+
+const messageCache = new Map();
+
+function guardarMensaje(message) {
+    if (!message || !message.id) return;
+
+    messageCache.set(message.id, {
+        id: message.id,
+        guildId: message.guild?.id,
+        channelId: message.channel?.id,
+        channelName: message.channel?.name || "desconocido",
+        authorId: message.author?.id,
+        authorTag: message.author?.tag || "Desconocido",
+        authorAvatar: message.author?.displayAvatarURL({
+            extension: "png",
+            size: 256
+        }),
+        content: message.content || "",
+        createdTimestamp: message.createdTimestamp
+    });
+
+    // Evitar que la memoria crezca indefinidamente.
+    if (messageCache.size > 5000) {
+        const primero = messageCache.keys().next().value;
+
+        if (primero) {
+            messageCache.delete(primero);
+        }
+    }
+}
 
 // =====================================================
 // ENVIAR LOG
@@ -57,6 +95,11 @@ const client = new Client({
 
 async function enviarLog(guild, embed) {
     try {
+        if (!guild) {
+            console.log("❌ No se recibió el servidor para el log.");
+            return;
+        }
+
         const canal = await guild.channels.fetch(LOG_CHANNEL_ID);
 
         if (!canal) {
@@ -67,7 +110,7 @@ async function enviarLog(guild, embed) {
         }
 
         if (!canal.isTextBased()) {
-            console.log("❌ El canal de logs no es un canal de texto.");
+            console.log("❌ El canal de logs no es de texto.");
             return;
         }
 
@@ -75,13 +118,10 @@ async function enviarLog(guild, embed) {
             embeds: [embed]
         });
 
-        console.log("📋 Log enviado correctamente.");
+        console.log("✅ 📋 Log enviado correctamente.");
 
     } catch (error) {
-        console.error(
-            "❌ ERROR ENVIANDO LOG:",
-            error
-        );
+        console.error("❌ ERROR ENVIANDO LOG:", error);
     }
 }
 
@@ -185,10 +225,7 @@ async function registrarComandos() {
         console.log("✅ Comandos registrados correctamente.");
 
     } catch (error) {
-        console.error(
-            "❌ Error registrando comandos:",
-            error
-        );
+        console.error("❌ Error registrando comandos:", error);
     }
 }
 
@@ -197,32 +234,95 @@ async function registrarComandos() {
 // =====================================================
 
 client.once("clientReady", () => {
+    console.log(`✅ Bot conectado como ${client.user.tag}`);
+
+    console.log("🟢 Gateway intents configurados:");
+    console.log("   • Guilds");
+    console.log("   • GuildMembers");
+    console.log("   • GuildMessages");
+    console.log("   • MessageContent");
+
     console.log(
-        `✅ Bot conectado como ${client.user.tag}`
+        `📋 Canal de logs: ${LOG_CHANNEL_ID}`
     );
 
     console.log(
-        "🟢 Message Content Intent activado en el código."
+        `👋 Canal de bienvenida: ${WELCOME_CHANNEL_ID}`
     );
 
     console.log(
-        `📋 Canal de logs configurado: ${LOG_CHANNEL_ID}`
+        `👑 Rol Owner: ${OWNER_ROLE_ID}`
     );
 });
 
 // =====================================================
-// DIAGNÓSTICO DE MENSAJES
+// MENSAJE CREADO
 // =====================================================
 
-client.on("messageCreate", message => {
+client.on("messageCreate", async message => {
 
-    if (!message.guild) return;
+    try {
 
-    if (message.author?.bot) return;
+        if (!message.guild) return;
+        if (message.author?.bot) return;
 
-    console.log(
-        `📩 MENSAJE DETECTADO | ${message.author.tag} | #${message.channel.name} | ${message.content}`
-    );
+        // Guardamos el mensaje para poder recuperarlo
+        // cuando sea editado o eliminado.
+        guardarMensaje(message);
+
+        console.log(
+            `📩 MENSAJE DETECTADO | ${message.author.tag} | #${message.channel.name} | ${message.content}`
+        );
+
+        const contenido =
+            message.content || "Sin contenido de texto.";
+
+        const texto =
+            contenido.length > 1000
+                ? contenido.substring(0, 997) + "..."
+                : contenido;
+
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle("📩 NUEVO MENSAJE")
+            .addFields(
+                {
+                    name: "👤 Usuario",
+                    value:
+                        `${message.author} \`${message.author.tag}\``
+                },
+                {
+                    name: "📍 Canal",
+                    value:
+                        `${message.channel}`
+                },
+                {
+                    name: "💬 Mensaje",
+                    value:
+                        `\`\`\`\n${texto}\n\`\`\``
+                }
+            )
+            .setTimestamp();
+
+        embed.setThumbnail(
+            message.author.displayAvatarURL({
+                extension: "png",
+                size: 256
+            })
+        );
+
+        await enviarLog(
+            message.guild,
+            embed
+        );
+
+    } catch (error) {
+
+        console.error(
+            "❌ ERROR EN MESSAGE CREATE:",
+            error
+        );
+    }
 });
 
 // =====================================================
@@ -234,21 +334,51 @@ client.on("messageDelete", async message => {
     try {
 
         if (!message.guild) return;
-
         if (message.author?.bot) return;
 
-        console.log(
-            `🗑️ MENSAJE BORRADO | ${message.author?.tag || "Desconocido"} | #${message.channel?.name || "Desconocido"}`
-        );
+        const guardado =
+            messageCache.get(message.id);
 
-        let contenido =
+        const autor =
+            message.author ||
+            guardado?.authorId
+                ? message.author
+                : null;
+
+        const autorTag =
+            message.author?.tag ||
+            guardado?.authorTag ||
+            "Desconocido";
+
+        const autorMention =
+            message.author
+                ? `${message.author}`
+                : guardado?.authorId
+                    ? `<@${guardado.authorId}>`
+                    : "Desconocido";
+
+        const canal =
+            message.channel ||
+            null;
+
+        const canalNombre =
+            canal?.name ||
+            guardado?.channelName ||
+            "Desconocido";
+
+        const contenido =
             message.content ||
+            guardado?.content ||
             "Contenido no disponible.";
 
-        if (contenido.length > 1000) {
-            contenido =
-                contenido.substring(0, 997) + "...";
-        }
+        console.log(
+            `🗑️ MENSAJE BORRADO | ${autorTag} | #${canalNombre} | ${contenido}`
+        );
+
+        const texto =
+            contenido.length > 1000
+                ? contenido.substring(0, 997) + "..."
+                : contenido;
 
         const embed = new EmbedBuilder()
             .setColor(0xED4245)
@@ -259,29 +389,37 @@ client.on("messageDelete", async message => {
             .addFields(
                 {
                     name: "👤 Usuario",
-                    value: message.author
-                        ? `${message.author} \`${message.author.tag}\``
-                        : "Desconocido"
+                    value:
+                        `${autorMention} \`${autorTag}\``
                 },
                 {
                     name: "📍 Canal",
-                    value: message.channel
-                        ? `${message.channel}`
-                        : "Desconocido"
+                    value:
+                        canal
+                            ? `${canal}`
+                            : `#${canalNombre}`
                 },
                 {
-                    name: "💬 Mensaje",
-                    value: `\`\`\`\n${contenido}\n\`\`\``
+                    name: "💬 Mensaje eliminado",
+                    value:
+                        `\`\`\`\n${texto}\n\`\`\``
                 }
             )
             .setTimestamp();
 
         if (message.author) {
+
             embed.setThumbnail(
                 message.author.displayAvatarURL({
                     extension: "png",
                     size: 256
                 })
+            );
+
+        } else if (guardado?.authorAvatar) {
+
+            embed.setThumbnail(
+                guardado.authorAvatar
             );
         }
 
@@ -289,6 +427,8 @@ client.on("messageDelete", async message => {
             message.guild,
             embed
         );
+
+        messageCache.delete(message.id);
 
     } catch (error) {
 
@@ -311,34 +451,56 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
 
         if (oldMessage.author?.bot) return;
 
-        if (
-            oldMessage.content ===
-            newMessage.content
-        ) {
+        // Si son partials, intentamos obtener los mensajes completos.
+        if (oldMessage.partial) {
+            try {
+                await oldMessage.fetch();
+            } catch (error) {
+                console.log(
+                    "⚠️ No se pudo obtener el mensaje antiguo."
+                );
+            }
+        }
+
+        if (newMessage.partial) {
+            try {
+                await newMessage.fetch();
+            } catch (error) {
+                console.log(
+                    "⚠️ No se pudo obtener el mensaje nuevo."
+                );
+            }
+        }
+
+        const antes =
+            oldMessage.content ||
+            messageCache.get(oldMessage.id)?.content ||
+            "";
+
+        const despues =
+            newMessage.content ||
+            "";
+
+        // Ignorar cambios que no sean de contenido.
+        if (antes === despues) {
             return;
         }
+
+        guardarMensaje(newMessage);
 
         console.log(
             `✏️ MENSAJE EDITADO | ${oldMessage.author?.tag || "Desconocido"} | #${oldMessage.channel?.name || "Desconocido"}`
         );
 
-        let antes =
-            oldMessage.content ||
-            "Contenido no disponible.";
+        const antesTexto =
+            antes.length > 900
+                ? antes.substring(0, 897) + "..."
+                : antes;
 
-        let despues =
-            newMessage.content ||
-            "Contenido no disponible.";
-
-        if (antes.length > 900) {
-            antes =
-                antes.substring(0, 897) + "...";
-        }
-
-        if (despues.length > 900) {
-            despues =
-                despues.substring(0, 897) + "...";
-        }
+        const despuesTexto =
+            despues.length > 900
+                ? despues.substring(0, 897) + "..."
+                : despues;
 
         const embed = new EmbedBuilder()
             .setColor(0xF1C40F)
@@ -346,30 +508,33 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
             .addFields(
                 {
                     name: "👤 Usuario",
-                    value: oldMessage.author
-                        ? `${oldMessage.author} \`${oldMessage.author.tag}\``
-                        : "Desconocido"
+                    value:
+                        oldMessage.author
+                            ? `${oldMessage.author} \`${oldMessage.author.tag}\``
+                            : "Desconocido"
                 },
                 {
                     name: "📍 Canal",
-                    value: oldMessage.channel
-                        ? `${oldMessage.channel}`
-                        : "Desconocido"
+                    value:
+                        oldMessage.channel
+                            ? `${oldMessage.channel}`
+                            : "Desconocido"
                 },
                 {
                     name: "🔴 Antes",
                     value:
-                        `\`\`\`\n${antes}\n\`\`\``
+                        `\`\`\`\n${antesTexto || "Sin contenido"}\n\`\`\``
                 },
                 {
                     name: "🟢 Después",
                     value:
-                        `\`\`\`\n${despues}\n\`\`\``
+                        `\`\`\`\n${despuesTexto || "Sin contenido"}\n\`\`\``
                 }
             )
             .setTimestamp();
 
         if (oldMessage.author) {
+
             embed.setThumbnail(
                 oldMessage.author.displayAvatarURL({
                     extension: "png",
@@ -406,9 +571,11 @@ client.on("guildMemberAdd", async member => {
             );
 
         if (!canal || !canal.isTextBased()) {
+
             console.log(
                 "❌ No encontré el canal de bienvenida."
             );
+
             return;
         }
 
@@ -420,7 +587,7 @@ client.on("guildMemberAdd", async member => {
 
         const embed = new EmbedBuilder()
             .setColor(0x8E44AD)
-            .setTitle("🎉 ¡NUEVO MIEMBRO!")
+            .setTitle("🫶︱𝗕𝗜𝗘𝗡𝗩𝗘𝗡𝗜𝗗𝗢𝗦")
             .setDescription(
                 `💜 **¡Bienvenido/a ${member} a La Orden Morada!**\n\n` +
                 `🫶 Esperamos que disfrutes del servidor y la pases genial.`
@@ -450,7 +617,8 @@ client.on("guildMemberAdd", async member => {
                 },
                 {
                     name: "🆔 ID",
-                    value: member.id
+                    value:
+                        member.id
                 }
             )
             .setTimestamp();
@@ -495,7 +663,8 @@ client.on("guildMemberRemove", async member => {
                 },
                 {
                     name: "🆔 ID",
-                    value: member.id
+                    value:
+                        member.id
                 }
             )
             .setTimestamp();
@@ -592,11 +761,13 @@ client.on("interactionCreate", async interaction => {
                 .addFields(
                     {
                         name: "👤 Usuario",
-                        value: `${usuario}`
+                        value:
+                            `${usuario}`
                     },
                     {
                         name: "🆔 ID",
-                        value: usuario.id
+                        value:
+                            usuario.id
                     },
                     {
                         name: "🛡️ Moderador",
@@ -698,11 +869,13 @@ client.on("interactionCreate", async interaction => {
                 .addFields(
                     {
                         name: "👤 Usuario",
-                        value: `${usuario}`
+                        value:
+                            `${usuario}`
                     },
                     {
                         name: "⏱️ Duración",
-                        value: duracion
+                        value:
+                            duracion
                     },
                     {
                         name: "🛡️ Moderador",
@@ -752,7 +925,8 @@ client.on("interactionCreate", async interaction => {
                 .addFields(
                     {
                         name: "👤 Usuario",
-                        value: `${usuario}`
+                        value:
+                            `${usuario}`
                     },
                     {
                         name: "🛡️ Moderador",
@@ -797,7 +971,8 @@ client.on("interactionCreate", async interaction => {
                 .addFields(
                     {
                         name: "🆔 ID",
-                        value: id
+                        value:
+                            id
                     },
                     {
                         name: "🛡️ Moderador",
@@ -905,7 +1080,8 @@ client.on("interactionCreate", async interaction => {
                 .addFields(
                     {
                         name: "📍 Canal",
-                        value: `${canal}`
+                        value:
+                            `${canal}`
                     },
                     {
                         name: "🛡️ Moderador",
@@ -984,7 +1160,8 @@ client.on("interactionCreate", async interaction => {
                 .addFields(
                     {
                         name: "📍 Canal",
-                        value: `${canal}`
+                        value:
+                            `${canal}`
                     },
                     {
                         name: "🛡️ Moderador",
