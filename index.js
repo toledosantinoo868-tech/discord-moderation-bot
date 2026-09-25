@@ -7,6 +7,30 @@ const {
     PermissionFlagsBits
 } = require("discord.js");
 
+const http = require("http");
+
+// ===============================
+// SERVIDOR HTTP PARA RENDER
+// ===============================
+
+const PORT = process.env.PORT || 3000;
+
+const server = http.createServer((req, res) => {
+    res.writeHead(200, {
+        "Content-Type": "text/plain"
+    });
+
+    res.end("Discord bot online");
+});
+
+server.listen(PORT, "0.0.0.0", () => {
+    console.log(`🌐 Servidor HTTP escuchando en el puerto ${PORT}`);
+});
+
+// ===============================
+// CLIENTE DE DISCORD
+// ===============================
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -20,6 +44,10 @@ const CLIENT_ID = "1552817688378605650";
 // El token se coloca mediante la variable de entorno DISCORD_TOKEN.
 // NO pongas el token directamente aquí.
 const TOKEN = process.env.DISCORD_TOKEN;
+
+// ===============================
+// COMANDOS
+// ===============================
 
 const commands = [
     new SlashCommandBuilder()
@@ -79,6 +107,10 @@ const commands = [
         .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
 ].map(command => command.toJSON());
 
+// ===============================
+// REST API DE DISCORD
+// ===============================
+
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 async function registrarComandos() {
@@ -96,9 +128,17 @@ async function registrarComandos() {
     }
 }
 
-client.once("ready", () => {
+// ===============================
+// EVENTO DEL BOT
+// ===============================
+
+client.once("clientReady", () => {
     console.log(`✅ Bot conectado como ${client.user.tag}`);
 });
+
+// ===============================
+// INTERACCIONES
+// ===============================
 
 client.on("interactionCreate", async interaction => {
     if (!interaction.isChatInputCommand()) return;
@@ -120,15 +160,20 @@ client.on("interactionCreate", async interaction => {
             await interaction.reply("🔓 Comando /unban recibido.");
         }
     } catch (error) {
-        console.error(error);
+        console.error("❌ Error procesando interacción:", error);
     }
 });
 
-registrarComandos();
+// ===============================
+// INICIAR BOT
+// ===============================
 
 if (!TOKEN) {
     console.error("❌ Falta DISCORD_TOKEN.");
     process.exit(1);
 }
 
+registrarComandos();
+
 client.login(TOKEN);
+
