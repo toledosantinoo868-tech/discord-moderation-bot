@@ -35,7 +35,6 @@ server.listen(PORT, "0.0.0.0", () => {
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent
     ]
@@ -148,7 +147,7 @@ function formatearDuracion(ms) {
 }
 
 // =====================================================
-// COMANDOS SLASH
+// COMANDOS
 // =====================================================
 
 const commands = [
