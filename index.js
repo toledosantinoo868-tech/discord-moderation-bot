@@ -49,7 +49,7 @@ const CLIENT_ID = "1552817688378605650";
 const TOKEN = process.env.DISCORD_TOKEN;
 
 // =====================================================
-// FUNCIONES DE DURACIÓN
+// DURACIONES
 // =====================================================
 
 function convertirDuracion(texto) {
@@ -148,10 +148,11 @@ function formatearDuracion(ms) {
 }
 
 // =====================================================
-// COMANDOS
+// COMANDOS SLASH
 // =====================================================
 
 const commands = [
+
     // BAN
     new SlashCommandBuilder()
         .setName("ban")
@@ -186,7 +187,7 @@ const commands = [
             option
                 .setName("duracion")
                 .setDescription(
-                    "Ej: 30s, 10m, 2h, 1d, 2h30m o permanente"
+                    "Ej: 30s, 5m, 1h, 24h, 7d, 2h30m"
                 )
                 .setRequired(true)
         )
@@ -201,9 +202,7 @@ const commands = [
         .addUserOption(option =>
             option
                 .setName("usuario")
-                .setDescription(
-                    "Usuario al que quieres quitar el mute"
-                )
+                .setDescription("Usuario al que quitar el mute")
                 .setRequired(true)
         )
         .setDefaultMemberPermissions(
@@ -213,9 +212,7 @@ const commands = [
     // UNBAN
     new SlashCommandBuilder()
         .setName("unban")
-        .setDescription(
-            "Desbanea a un usuario mediante su ID."
-        )
+        .setDescription("Desbanea a un usuario mediante su ID.")
         .addStringOption(option =>
             option
                 .setName("id")
@@ -229,9 +226,7 @@ const commands = [
     // LOCK
     new SlashCommandBuilder()
         .setName("lock")
-        .setDescription(
-            "Bloquea el canal actual."
-        )
+        .setDescription("Bloquea el canal actual.")
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ManageChannels
         ),
@@ -239,16 +234,15 @@ const commands = [
     // UNLOCK
     new SlashCommandBuilder()
         .setName("unlock")
-        .setDescription(
-            "Desbloquea el canal actual."
-        )
+        .setDescription("Desbloquea el canal actual.")
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ManageChannels
         )
+
 ].map(command => command.toJSON());
 
 // =====================================================
-// REGISTRO DE COMANDOS
+// REGISTRAR COMANDOS
 // =====================================================
 
 const rest = new REST({
@@ -266,9 +260,7 @@ async function registrarComandos() {
             }
         );
 
-        console.log(
-            "✅ Comandos registrados correctamente."
-        );
+        console.log("✅ Comandos registrados correctamente.");
 
     } catch (error) {
         console.error(
@@ -293,6 +285,7 @@ client.once("clientReady", () => {
 // =====================================================
 
 client.on("messageCreate", async message => {
+
     if (message.author.bot) return;
 
     if (
@@ -331,9 +324,7 @@ client.on("messageCreate", async message => {
 
 client.on("interactionCreate", async interaction => {
 
-    if (!interaction.isChatInputCommand()) {
-        return;
-    }
+    if (!interaction.isChatInputCommand()) return;
 
     try {
 
@@ -362,9 +353,7 @@ client.on("interactionCreate", async interaction => {
                 });
             }
 
-            if (
-                usuario.id === interaction.user.id
-            ) {
+            if (usuario.id === interaction.user.id) {
                 return interaction.reply({
                     content:
                         "❌ No puedes silenciarte a ti mismo.",
@@ -372,9 +361,7 @@ client.on("interactionCreate", async interaction => {
                 });
             }
 
-            if (
-                interaction.guild.ownerId === usuario.id
-            ) {
+            if (interaction.guild.ownerId === usuario.id) {
                 return interaction.reply({
                     content:
                         "❌ No puedes silenciar al dueño del servidor.",
@@ -389,7 +376,7 @@ client.on("interactionCreate", async interaction => {
                 return interaction.reply({
                     content:
                         "❌ Duración inválida.\n\n" +
-                        "Ejemplos: `30s`, `5m`, `2h`, `24h`, `7d`, `2h30m`, `1d12h` o `permanente`.",
+                        "Ejemplos: `30s`, `5m`, `1h`, `24h`, `7d`, `2h30m` o `1d12h`.",
                     ephemeral: true
                 });
             }
@@ -397,8 +384,8 @@ client.on("interactionCreate", async interaction => {
             if (duracion.permanente) {
                 return interaction.reply({
                     content:
-                        "⚠️ `permanente` necesita un sistema de rol `Muted`.\n\n" +
-                        "El timeout de Discord tiene un máximo de 28 días.",
+                        "⚠️ El timeout de Discord tiene un máximo de 28 días. " +
+                        "Para mute permanente necesitamos un sistema de rol `Muted`.",
                     ephemeral: true
                 });
             }
@@ -406,9 +393,7 @@ client.on("interactionCreate", async interaction => {
             const MAX_TIMEOUT =
                 28 * 24 * 60 * 60 * 1000;
 
-            if (
-                duracion.milisegundos > MAX_TIMEOUT
-            ) {
+            if (duracion.milisegundos > MAX_TIMEOUT) {
                 return interaction.reply({
                     content:
                         "❌ El máximo permitido por Discord es de **28 días**.",
@@ -458,9 +443,7 @@ client.on("interactionCreate", async interaction => {
         // UNMUTE
         // =================================================
 
-        if (
-            interaction.commandName === "unmute"
-        ) {
+        if (interaction.commandName === "unmute") {
 
             const usuario =
                 interaction.options.getUser("usuario");
@@ -507,9 +490,7 @@ client.on("interactionCreate", async interaction => {
         // BAN
         // =================================================
 
-        if (
-            interaction.commandName === "ban"
-        ) {
+        if (interaction.commandName === "ban") {
 
             const usuario =
                 interaction.options.getUser("usuario");
@@ -556,9 +537,7 @@ client.on("interactionCreate", async interaction => {
         // UNBAN
         // =================================================
 
-        if (
-            interaction.commandName === "unban"
-        ) {
+        if (interaction.commandName === "unban") {
 
             const id =
                 interaction.options.getString("id");
@@ -600,9 +579,7 @@ client.on("interactionCreate", async interaction => {
         // LOCK
         // =================================================
 
-        if (
-            interaction.commandName === "lock"
-        ) {
+        if (interaction.commandName === "lock") {
 
             const canal = interaction.channel;
 
@@ -645,9 +622,7 @@ client.on("interactionCreate", async interaction => {
         // UNLOCK
         // =================================================
 
-        if (
-            interaction.commandName === "unlock"
-        ) {
+        if (interaction.commandName === "unlock") {
 
             const canal = interaction.channel;
 
