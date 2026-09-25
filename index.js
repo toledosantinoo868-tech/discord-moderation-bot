@@ -10,9 +10,9 @@ const {
 
 const http = require("http");
 
-// ==========================================
+// =====================================================
 // SERVIDOR HTTP PARA RENDER
-// ==========================================
+// =====================================================
 
 const PORT = process.env.PORT || 3000;
 
@@ -28,26 +28,29 @@ server.listen(PORT, "0.0.0.0", () => {
     console.log(`🌐 Servidor HTTP escuchando en el puerto ${PORT}`);
 });
 
-// ==========================================
+// =====================================================
 // CLIENTE DISCORD
-// ==========================================
+// =====================================================
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMembers
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
     ]
 });
 
-// ID DE TU APLICACIÓN
-const CLIENT_ID = "1552817688378605650";
+// =====================================================
+// CONFIGURACIÓN
+// =====================================================
 
-// Token desde las variables de entorno de Render
+const CLIENT_ID = "1552817688378605650";
 const TOKEN = process.env.DISCORD_TOKEN;
 
-// ==========================================
+// =====================================================
 // FUNCIONES DE DURACIÓN
-// ==========================================
+// =====================================================
 
 function convertirDuracion(texto) {
     if (!texto) return null;
@@ -95,8 +98,10 @@ function convertirDuracion(texto) {
         return null;
     }
 
-    // Comprobar que no haya texto inválido
-    const textoLimpio = texto.replace(/(\d+)(mo|y|w|d|h|m|s)/g, "");
+    const textoLimpio = texto.replace(
+        /(\d+)(mo|y|w|d|h|m|s)/g,
+        ""
+    );
 
     if (textoLimpio.length > 0) {
         return null;
@@ -142,11 +147,12 @@ function formatearDuracion(ms) {
     return partes.join(" ") || "0 segundos";
 }
 
-// ==========================================
+// =====================================================
 // COMANDOS
-// ==========================================
+// =====================================================
 
 const commands = [
+    // BAN
     new SlashCommandBuilder()
         .setName("ban")
         .setDescription("Banea a un usuario.")
@@ -162,11 +168,14 @@ const commands = [
                 .setDescription("Ejemplo: 10m, 2h, 7d")
                 .setRequired(false)
         )
-        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.BanMembers
+        ),
 
+    // MUTE
     new SlashCommandBuilder()
         .setName("mute")
-        .setDescription("Silencia temporalmente a un usuario.")
+        .setDescription("Silencia a un usuario.")
         .addUserOption(option =>
             option
                 .setName("usuario")
@@ -176,39 +185,75 @@ const commands = [
         .addStringOption(option =>
             option
                 .setName("duracion")
-                .setDescription("Ej: 30s, 10m, 2h, 1d, 2h30m o permanente")
+                .setDescription(
+                    "Ej: 30s, 10m, 2h, 1d, 2h30m o permanente"
+                )
                 .setRequired(true)
         )
-        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ModerateMembers
+        ),
 
+    // UNMUTE
     new SlashCommandBuilder()
         .setName("unmute")
         .setDescription("Quita el silencio a un usuario.")
         .addUserOption(option =>
             option
                 .setName("usuario")
-                .setDescription("Usuario al que quieres quitar el mute")
+                .setDescription(
+                    "Usuario al que quieres quitar el mute"
+                )
                 .setRequired(true)
         )
-        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ModerateMembers
+        ),
 
+    // UNBAN
     new SlashCommandBuilder()
         .setName("unban")
-        .setDescription("Desbanea a un usuario mediante su ID.")
+        .setDescription(
+            "Desbanea a un usuario mediante su ID."
+        )
         .addStringOption(option =>
             option
                 .setName("id")
                 .setDescription("ID del usuario")
                 .setRequired(true)
         )
-        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.BanMembers
+        ),
+
+    // LOCK
+    new SlashCommandBuilder()
+        .setName("lock")
+        .setDescription(
+            "Bloquea el canal actual."
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ManageChannels
+        ),
+
+    // UNLOCK
+    new SlashCommandBuilder()
+        .setName("unlock")
+        .setDescription(
+            "Desbloquea el canal actual."
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ManageChannels
+        )
 ].map(command => command.toJSON());
 
-// ==========================================
+// =====================================================
 // REGISTRO DE COMANDOS
-// ==========================================
+// =====================================================
 
-const rest = new REST({ version: "10" }).setToken(TOKEN);
+const rest = new REST({
+    version: "10"
+}).setToken(TOKEN);
 
 async function registrarComandos() {
     try {
@@ -216,59 +261,129 @@ async function registrarComandos() {
 
         await rest.put(
             Routes.applicationCommands(CLIENT_ID),
-            { body: commands }
+            {
+                body: commands
+            }
         );
 
-        console.log("✅ Comandos registrados correctamente.");
+        console.log(
+            "✅ Comandos registrados correctamente."
+        );
+
     } catch (error) {
-        console.error("❌ Error registrando comandos:", error);
+        console.error(
+            "❌ Error registrando comandos:",
+            error
+        );
     }
 }
 
-// ==========================================
+// =====================================================
 // BOT LISTO
-// ==========================================
+// =====================================================
 
 client.once("clientReady", () => {
-    console.log(`✅ Bot conectado como ${client.user.tag}`);
+    console.log(
+        `✅ Bot conectado como ${client.user.tag}`
+    );
 });
 
-// ==========================================
+// =====================================================
+// !IP
+// =====================================================
+
+client.on("messageCreate", async message => {
+    if (message.author.bot) return;
+
+    if (
+        message.content.toLowerCase().trim() === "!ip"
+    ) {
+
+        const embed = new EmbedBuilder()
+            .setColor(0x57F287)
+            .setTitle("🎮 SERVIDOR DE MINECRAFT")
+            .addFields(
+                {
+                    name: "🌐 IP",
+                    value: "`mc.laordenmorada.lat`",
+                    inline: false
+                },
+                {
+                    name: "🔌 PUERTO",
+                    value: "`19527`",
+                    inline: false
+                }
+            )
+            .setFooter({
+                text: "Bot creado por DEVLVDARKKIDD"
+            })
+            .setTimestamp();
+
+        await message.reply({
+            embeds: [embed]
+        });
+    }
+});
+
+// =====================================================
 // INTERACCIONES
-// ==========================================
+// =====================================================
 
 client.on("interactionCreate", async interaction => {
-    if (!interaction.isChatInputCommand()) return;
+
+    if (!interaction.isChatInputCommand()) {
+        return;
+    }
 
     try {
 
-        // ======================================
+        // =================================================
         // MUTE
-        // ======================================
+        // =================================================
 
         if (interaction.commandName === "mute") {
 
-            const usuario = interaction.options.getUser("usuario");
-            const duracionTexto = interaction.options.getString("duracion");
+            const usuario =
+                interaction.options.getUser("usuario");
 
-            const miembro = await interaction.guild.members.fetch(usuario.id);
+            const duracionTexto =
+                interaction.options.getString("duracion");
 
-            // Evitar mutear al dueño/servidor si no corresponde
+            const miembro =
+                await interaction.guild.members.fetch(
+                    usuario.id
+                );
+
             if (!miembro) {
                 return interaction.reply({
-                    content: "❌ No pude encontrar a ese usuario en el servidor.",
+                    content:
+                        "❌ No pude encontrar a ese usuario.",
                     ephemeral: true
                 });
             }
 
-            if (usuario.id === interaction.user.id) {
+            if (
+                usuario.id === interaction.user.id
+            ) {
                 return interaction.reply({
-                    content: "❌ No puedes silenciarte a ti mismo.",
+                    content:
+                        "❌ No puedes silenciarte a ti mismo.",
                     ephemeral: true
                 });
             }
 
-            const duracion = convertirDuracion(duracionTexto);
+            if (
+                interaction.guild.ownerId === usuario.id
+            ) {
+                return interaction.reply({
+                    content:
+                        "❌ No puedes silenciar al dueño del servidor.",
+                    ephemeral: true
+                });
+            }
+
+            const duracion =
+                convertirDuracion(duracionTexto);
 
             if (!duracion) {
                 return interaction.reply({
@@ -279,28 +394,24 @@ client.on("interactionCreate", async interaction => {
                 });
             }
 
-            // ==================================
-            // MUTE PERMANENTE
-            // ==================================
-
             if (duracion.permanente) {
-
                 return interaction.reply({
                     content:
-                        "⚠️ El modo `permanente` requiere un sistema de rol de mute. " +
-                        "El timeout de Discord no puede ser permanente.\n\n" +
-                        "Por ahora usa una duración temporal como `28d`."
+                        "⚠️ `permanente` necesita un sistema de rol `Muted`.\n\n" +
+                        "El timeout de Discord tiene un máximo de 28 días.",
+                    ephemeral: true
                 });
             }
 
-            // Discord permite timeouts de hasta 28 días
-            const MAX_TIMEOUT = 28 * 24 * 60 * 60 * 1000;
+            const MAX_TIMEOUT =
+                28 * 24 * 60 * 60 * 1000;
 
-            if (duracion.milisegundos > MAX_TIMEOUT) {
+            if (
+                duracion.milisegundos > MAX_TIMEOUT
+            ) {
                 return interaction.reply({
                     content:
-                        "❌ La duración supera el máximo permitido por el timeout de Discord: **28 días**.\n\n" +
-                        "Para duraciones mayores podemos implementar un sistema de rol de mute permanente.",
+                        "❌ El máximo permitido por Discord es de **28 días**.",
                     ephemeral: true
                 });
             }
@@ -331,33 +442,38 @@ client.on("interactionCreate", async interaction => {
                     }
                 )
                 .setFooter({
-                    text: "Bot creado por DEVLVDARKKIDD"
+                    text:
+                        "Bot creado por DEVLVDARKKIDD"
                 })
                 .setTimestamp();
 
             await interaction.reply({
                 embeds: [embed]
             });
+
+            return;
         }
 
-        // ======================================
+        // =================================================
         // UNMUTE
-        // ======================================
+        // =================================================
 
-        if (interaction.commandName === "unmute") {
+        if (
+            interaction.commandName === "unmute"
+        ) {
 
-            const usuario = interaction.options.getUser("usuario");
+            const usuario =
+                interaction.options.getUser("usuario");
 
-            const miembro = await interaction.guild.members.fetch(usuario.id);
+            const miembro =
+                await interaction.guild.members.fetch(
+                    usuario.id
+                );
 
-            if (!miembro) {
-                return interaction.reply({
-                    content: "❌ No pude encontrar a ese usuario.",
-                    ephemeral: true
-                });
-            }
-
-            await miembro.timeout(null, `Mute quitado por ${interaction.user.tag}`);
+            await miembro.timeout(
+                null,
+                `Mute quitado por ${interaction.user.tag}`
+            );
 
             const embed = new EmbedBuilder()
                 .setColor(0x57F287)
@@ -375,27 +491,37 @@ client.on("interactionCreate", async interaction => {
                     }
                 )
                 .setFooter({
-                    text: "Bot creado por DEVLVDARKKIDD"
+                    text:
+                        "Bot creado por DEVLVDARKKIDD"
                 })
                 .setTimestamp();
 
             await interaction.reply({
                 embeds: [embed]
             });
+
+            return;
         }
 
-        // ======================================
+        // =================================================
         // BAN
-        // ======================================
+        // =================================================
 
-        if (interaction.commandName === "ban") {
+        if (
+            interaction.commandName === "ban"
+        ) {
 
-            const usuario = interaction.options.getUser("usuario");
+            const usuario =
+                interaction.options.getUser("usuario");
 
-            const miembro = await interaction.guild.members.fetch(usuario.id);
+            const miembro =
+                await interaction.guild.members.fetch(
+                    usuario.id
+                );
 
             await miembro.ban({
-                reason: `Ban aplicado por ${interaction.user.tag}`
+                reason:
+                    `Ban aplicado por ${interaction.user.tag}`
             });
 
             const embed = new EmbedBuilder()
@@ -414,22 +540,28 @@ client.on("interactionCreate", async interaction => {
                     }
                 )
                 .setFooter({
-                    text: "Bot creado por DEVLVDARKKIDD"
+                    text:
+                        "Bot creado por DEVLVDARKKIDD"
                 })
                 .setTimestamp();
 
             await interaction.reply({
                 embeds: [embed]
             });
+
+            return;
         }
 
-        // ======================================
+        // =================================================
         // UNBAN
-        // ======================================
+        // =================================================
 
-        if (interaction.commandName === "unban") {
+        if (
+            interaction.commandName === "unban"
+        ) {
 
-            const id = interaction.options.getString("id");
+            const id =
+                interaction.options.getString("id");
 
             await interaction.guild.members.unban(
                 id,
@@ -452,39 +584,147 @@ client.on("interactionCreate", async interaction => {
                     }
                 )
                 .setFooter({
-                    text: "Bot creado por DEVLVDARKKIDD"
+                    text:
+                        "Bot creado por DEVLVDARKKIDD"
                 })
                 .setTimestamp();
 
             await interaction.reply({
                 embeds: [embed]
             });
+
+            return;
+        }
+
+        // =================================================
+        // LOCK
+        // =================================================
+
+        if (
+            interaction.commandName === "lock"
+        ) {
+
+            const canal = interaction.channel;
+
+            await canal.permissionOverwrites.edit(
+                interaction.guild.roles.everyone,
+                {
+                    SendMessages: false
+                }
+            );
+
+            const embed = new EmbedBuilder()
+                .setColor(0xED4245)
+                .setTitle("🔒 CANAL BLOQUEADO")
+                .addFields(
+                    {
+                        name: "📁 Canal",
+                        value: `${canal}`,
+                        inline: false
+                    },
+                    {
+                        name: "🛡️ Moderador",
+                        value: `${interaction.user}`,
+                        inline: true
+                    }
+                )
+                .setFooter({
+                    text:
+                        "Bot creado por DEVLVDARKKIDD"
+                })
+                .setTimestamp();
+
+            await interaction.reply({
+                embeds: [embed]
+            });
+
+            return;
+        }
+
+        // =================================================
+        // UNLOCK
+        // =================================================
+
+        if (
+            interaction.commandName === "unlock"
+        ) {
+
+            const canal = interaction.channel;
+
+            await canal.permissionOverwrites.edit(
+                interaction.guild.roles.everyone,
+                {
+                    SendMessages: null
+                }
+            );
+
+            const embed = new EmbedBuilder()
+                .setColor(0x57F287)
+                .setTitle("🔓 CANAL DESBLOQUEADO")
+                .addFields(
+                    {
+                        name: "📁 Canal",
+                        value: `${canal}`,
+                        inline: false
+                    },
+                    {
+                        name: "🛡️ Moderador",
+                        value: `${interaction.user}`,
+                        inline: true
+                    }
+                )
+                .setFooter({
+                    text:
+                        "Bot creado por DEVLVDARKKIDD"
+                })
+                .setTimestamp();
+
+            await interaction.reply({
+                embeds: [embed]
+            });
+
+            return;
         }
 
     } catch (error) {
 
-        console.error("❌ Error procesando comando:", error);
+        console.error(
+            "❌ Error procesando comando:",
+            error
+        );
 
-        if (interaction.replied || interaction.deferred) {
+        if (
+            interaction.replied ||
+            interaction.deferred
+        ) {
+
             await interaction.followUp({
-                content: "❌ Ocurrió un error al ejecutar el comando.",
+                content:
+                    "❌ Ocurrió un error al ejecutar el comando.",
                 ephemeral: true
             }).catch(() => {});
+
         } else {
+
             await interaction.reply({
-                content: "❌ Ocurrió un error al ejecutar el comando.",
+                content:
+                    "❌ Ocurrió un error al ejecutar el comando.",
                 ephemeral: true
             }).catch(() => {});
         }
     }
 });
 
-// ==========================================
-// INICIAR
-// ==========================================
+// =====================================================
+// INICIAR BOT
+// =====================================================
 
 if (!TOKEN) {
-    console.error("❌ Falta DISCORD_TOKEN en las variables de entorno.");
+
+    console.error(
+        "❌ Falta DISCORD_TOKEN en las variables de entorno."
+    );
+
     process.exit(1);
 }
 
