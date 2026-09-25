@@ -10,19 +10,22 @@ const {
 
 const http = require("http");
 
-// =====================================================
+// ==============================
 // CONFIGURACIÓN
-// =====================================================
+// ==============================
 
 const CLIENT_ID = "1552817688378605650";
 const TOKEN = process.env.DISCORD_TOKEN;
 
-// ID DEL ROL OWNER
+// ID del rol Owner
 const OWNER_ROLE_ID = "1531489394127536188";
 
-// =====================================================
+// ID del canal de bienvenida
+const WELCOME_CHANNEL_ID = "1531493723840450580";
+
+// ==============================
 // SERVIDOR PARA RENDER
-// =====================================================
+// ==============================
 
 const PORT = process.env.PORT || 10000;
 
@@ -36,111 +39,20 @@ http.createServer((req, res) => {
     console.log(`🌐 Servidor HTTP escuchando en el puerto ${PORT}`);
 });
 
-// =====================================================
+// ==============================
 // CLIENTE DISCORD
-// =====================================================
+// ==============================
 
 const client = new Client({
     intents: [
-        GatewayIntentBits.Guilds
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers
     ]
 });
 
-// =====================================================
-// DURACIONES
-// =====================================================
-
-function convertirDuracion(texto) {
-    if (!texto) return null;
-
-    texto = texto.toLowerCase().replace(/\s+/g, "");
-
-    if (
-        texto === "permanente" ||
-        texto === "permanent" ||
-        texto === "perm"
-    ) {
-        return {
-            permanente: true,
-            milisegundos: null,
-            texto: "Permanente"
-        };
-    }
-
-    const regex = /(\d+)(mo|y|w|d|h|m|s)/g;
-
-    const unidades = {
-        s: 1000,
-        m: 60 * 1000,
-        h: 60 * 60 * 1000,
-        d: 24 * 60 * 60 * 1000,
-        w: 7 * 24 * 60 * 60 * 1000,
-        mo: 30 * 24 * 60 * 60 * 1000,
-        y: 365 * 24 * 60 * 60 * 1000
-    };
-
-    let match;
-    let total = 0;
-    let encontrado = false;
-    let longitud = 0;
-
-    while ((match = regex.exec(texto)) !== null) {
-        encontrado = true;
-
-        const cantidad = Number(match[1]);
-        const unidad = match[2];
-
-        total += cantidad * unidades[unidad];
-        longitud += match[0].length;
-    }
-
-    if (!encontrado || longitud !== texto.length || total <= 0) {
-        return null;
-    }
-
-    return {
-        permanente: false,
-        milisegundos: total,
-        texto: formatearDuracion(total)
-    };
-}
-
-function formatearDuracion(ms) {
-    let segundos = Math.floor(ms / 1000);
-
-    const dias = Math.floor(segundos / 86400);
-    segundos %= 86400;
-
-    const horas = Math.floor(segundos / 3600);
-    segundos %= 3600;
-
-    const minutos = Math.floor(segundos / 60);
-    segundos %= 60;
-
-    const partes = [];
-
-    if (dias > 0) {
-        partes.push(`${dias} ${dias === 1 ? "día" : "días"}`);
-    }
-
-    if (horas > 0) {
-        partes.push(`${horas} ${horas === 1 ? "hora" : "horas"}`);
-    }
-
-    if (minutos > 0) {
-        partes.push(`${minutos} ${minutos === 1 ? "minuto" : "minutos"}`);
-    }
-
-    if (segundos > 0) {
-        partes.push(`${segundos} ${segundos === 1 ? "segundo" : "segundos"}`);
-    }
-
-    return partes.join(" ") || "0 segundos";
-}
-
-// =====================================================
+// ==============================
 // COMANDOS
-// =====================================================
+// ==============================
 
 const commands = [
 
@@ -173,9 +85,7 @@ const commands = [
         .addStringOption(option =>
             option
                 .setName("duracion")
-                .setDescription(
-                    "Ej: 30s, 5m, 1h, 24h, 7d"
-                )
+                .setDescription("Ej: 30s, 5m, 1h, 1d")
                 .setRequired(true)
         )
         .setDefaultMemberPermissions(
@@ -184,7 +94,7 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("unmute")
-        .setDescription("Quita el silencio a un usuario.")
+        .setDescription("Quita el mute a un usuario.")
         .addUserOption(option =>
             option
                 .setName("usuario")
@@ -197,7 +107,7 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("unban")
-        .setDescription("Desbanea a un usuario mediante su ID.")
+        .setDescription("Desbanea a un usuario.")
         .addStringOption(option =>
             option
                 .setName("id")
@@ -218,9 +128,9 @@ const commands = [
 
 ].map(command => command.toJSON());
 
-// =====================================================
-// REGISTRO DE COMANDOS
-// =====================================================
+// ==============================
+// REGISTRAR COMANDOS
+// ==============================
 
 const rest = new REST({
     version: "10"
@@ -240,26 +150,75 @@ async function registrarComandos() {
         console.log("✅ Comandos registrados correctamente.");
 
     } catch (error) {
-        console.error(
-            "❌ Error registrando comandos:",
-            error
-        );
+        console.error("❌ Error registrando comandos:", error);
     }
 }
 
-// =====================================================
-// BOT READY
-// =====================================================
+// ==============================
+// BOT CONECTADO
+// ==============================
 
 client.once("clientReady", () => {
-    console.log(
-        `✅ Bot conectado como ${client.user.tag}`
-    );
+    console.log(`✅ Bot conectado como ${client.user.tag}`);
 });
 
-// =====================================================
+// ==============================
+// BIENVENIDAS
+// ==============================
+
+client.on("guildMemberAdd", async member => {
+
+    try {
+
+        const canal = member.guild.channels.cache.get(
+            WELCOME_CHANNEL_ID
+        );
+
+        if (!canal) {
+            console.log("❌ No encontré el canal de bienvenida.");
+            return;
+        }
+
+        const avatar = member.displayAvatarURL({
+            extension: "png",
+            size: 1024
+        });
+
+        const embed = new EmbedBuilder()
+            .setColor(0x8E44AD)
+            .setTitle("🎉 ¡NUEVO MIEMBRO!")
+            .setDescription(
+                `💜 **¡Bienvenido/a ${member} a La Orden Morada!**\n\n` +
+                `🫶 Esperamos que disfrutes del servidor y la pases genial.`
+            )
+            .setThumbnail(avatar)
+            .setImage(avatar)
+            .setFooter({
+                text: "La Orden Morada"
+            })
+            .setTimestamp();
+
+        await canal.send({
+            content: `🎉 ¡Bienvenido/a ${member}!`,
+            embeds: [embed]
+        });
+
+        console.log(
+            `👋 Bienvenida enviada para ${member.user.tag}`
+        );
+
+    } catch (error) {
+
+        console.error(
+            "❌ Error enviando bienvenida:",
+            error
+        );
+    }
+});
+
+// ==============================
 // INTERACCIONES
-// =====================================================
+// ==============================
 
 client.on("interactionCreate", async interaction => {
 
@@ -267,9 +226,9 @@ client.on("interactionCreate", async interaction => {
 
     try {
 
-        // =================================================
-        // IP
-        // =================================================
+        // ==========================
+        // /IP
+        // ==========================
 
         if (interaction.commandName === "ip") {
 
@@ -290,7 +249,7 @@ client.on("interactionCreate", async interaction => {
                     }
                 )
                 .setFooter({
-                    text: "Bot creado por DEVLVDARKKIDD"
+                    text: "La Orden Morada"
                 })
                 .setTimestamp();
 
@@ -299,130 +258,9 @@ client.on("interactionCreate", async interaction => {
             });
         }
 
-        // =================================================
-        // MUTE
-        // =================================================
-
-        if (interaction.commandName === "mute") {
-
-            const usuario =
-                interaction.options.getUser("usuario");
-
-            const duracionTexto =
-                interaction.options.getString("duracion");
-
-            const miembro =
-                await interaction.guild.members.fetch(
-                    usuario.id
-                );
-
-            const duracion =
-                convertirDuracion(duracionTexto);
-
-            if (!duracion) {
-                return interaction.reply({
-                    content:
-                        "❌ Duración inválida. Ejemplos: `30s`, `5m`, `1h`, `24h`, `7d`.",
-                    ephemeral: true
-                });
-            }
-
-            if (duracion.permanente) {
-                return interaction.reply({
-                    content:
-                        "⚠️ Discord no permite timeouts permanentes. El máximo es de 28 días.",
-                    ephemeral: true
-                });
-            }
-
-            const MAX_TIMEOUT =
-                28 * 24 * 60 * 60 * 1000;
-
-            if (duracion.milisegundos > MAX_TIMEOUT) {
-                return interaction.reply({
-                    content:
-                        "❌ El máximo permitido por Discord es de 28 días.",
-                    ephemeral: true
-                });
-            }
-
-            await miembro.timeout(
-                duracion.milisegundos,
-                `Mute aplicado por ${interaction.user.tag}`
-            );
-
-            const embed = new EmbedBuilder()
-                .setColor(0x5865F2)
-                .setTitle("🔇 USUARIO SILENCIADO")
-                .addFields(
-                    {
-                        name: "👤 Usuario",
-                        value: `${usuario}`
-                    },
-                    {
-                        name: "⏱️ Tiempo",
-                        value: duracion.texto
-                    },
-                    {
-                        name: "🛡️ Moderador",
-                        value: `${interaction.user}`
-                    }
-                )
-                .setFooter({
-                    text: "Bot creado por DEVLVDARKKIDD"
-                })
-                .setTimestamp();
-
-            return interaction.reply({
-                embeds: [embed]
-            });
-        }
-
-        // =================================================
-        // UNMUTE
-        // =================================================
-
-        if (interaction.commandName === "unmute") {
-
-            const usuario =
-                interaction.options.getUser("usuario");
-
-            const miembro =
-                await interaction.guild.members.fetch(
-                    usuario.id
-                );
-
-            await miembro.timeout(
-                null,
-                `Mute quitado por ${interaction.user.tag}`
-            );
-
-            const embed = new EmbedBuilder()
-                .setColor(0x57F287)
-                .setTitle("🔊 USUARIO DESILENCIADO")
-                .addFields(
-                    {
-                        name: "👤 Usuario",
-                        value: `${usuario}`
-                    },
-                    {
-                        name: "🛡️ Moderador",
-                        value: `${interaction.user}`
-                    }
-                )
-                .setFooter({
-                    text: "Bot creado por DEVLVDARKKIDD"
-                })
-                .setTimestamp();
-
-            return interaction.reply({
-                embeds: [embed]
-            });
-        }
-
-        // =================================================
-        // BAN
-        // =================================================
+        // ==========================
+        // /BAN
+        // ==========================
 
         if (interaction.commandName === "ban") {
 
@@ -452,9 +290,6 @@ client.on("interactionCreate", async interaction => {
                         value: `${interaction.user}`
                     }
                 )
-                .setFooter({
-                    text: "Bot creado por DEVLVDARKKIDD"
-                })
                 .setTimestamp();
 
             return interaction.reply({
@@ -462,9 +297,114 @@ client.on("interactionCreate", async interaction => {
             });
         }
 
-        // =================================================
-        // UNBAN
-        // =================================================
+        // ==========================
+        // /MUTE
+        // ==========================
+
+        if (interaction.commandName === "mute") {
+
+            const usuario =
+                interaction.options.getUser("usuario");
+
+            const duracion =
+                interaction.options.getString("duracion");
+
+            const miembro =
+                await interaction.guild.members.fetch(
+                    usuario.id
+                );
+
+            const regex = /^(\d+)(s|m|h|d)$/i;
+            const match = duracion.match(regex);
+
+            if (!match) {
+
+                return interaction.reply({
+                    content:
+                        "❌ Duración inválida. Usa `30s`, `5m`, `1h` o `1d`.",
+                    ephemeral: true
+                });
+            }
+
+            const cantidad = Number(match[1]);
+            const unidad = match[2].toLowerCase();
+
+            const multiplicadores = {
+                s: 1000,
+                m: 60 * 1000,
+                h: 60 * 60 * 1000,
+                d: 24 * 60 * 60 * 1000
+            };
+
+            const tiempo =
+                cantidad * multiplicadores[unidad];
+
+            const maximo =
+                28 * 24 * 60 * 60 * 1000;
+
+            if (tiempo > maximo) {
+
+                return interaction.reply({
+                    content:
+                        "❌ El máximo permitido por Discord es de 28 días.",
+                    ephemeral: true
+                });
+            }
+
+            await miembro.timeout(
+                tiempo,
+                `Mute aplicado por ${interaction.user.tag}`
+            );
+
+            const embed = new EmbedBuilder()
+                .setColor(0x5865F2)
+                .setTitle("🔇 USUARIO SILENCIADO")
+                .addFields(
+                    {
+                        name: "👤 Usuario",
+                        value: `${usuario}`
+                    },
+                    {
+                        name: "⏱️ Duración",
+                        value: duracion
+                    },
+                    {
+                        name: "🛡️ Moderador",
+                        value: `${interaction.user}`
+                    }
+                )
+                .setTimestamp();
+
+            return interaction.reply({
+                embeds: [embed]
+            });
+        }
+
+        // ==========================
+        // /UNMUTE
+        // ==========================
+
+        if (interaction.commandName === "unmute") {
+
+            const usuario =
+                interaction.options.getUser("usuario");
+
+            const miembro =
+                await interaction.guild.members.fetch(
+                    usuario.id
+                );
+
+            await miembro.timeout(null);
+
+            return interaction.reply({
+                content:
+                    `🔊 ${usuario} ya puede volver a hablar.`
+            });
+        }
+
+        // ==========================
+        // /UNBAN
+        // ==========================
 
         if (interaction.commandName === "unban") {
 
@@ -476,38 +416,21 @@ client.on("interactionCreate", async interaction => {
                 `Unban realizado por ${interaction.user.tag}`
             );
 
-            const embed = new EmbedBuilder()
-                .setColor(0x57F287)
-                .setTitle("🔓 USUARIO DESBANEADO")
-                .addFields(
-                    {
-                        name: "🆔 ID",
-                        value: id
-                    },
-                    {
-                        name: "🛡️ Moderador",
-                        value: `${interaction.user}`
-                    }
-                )
-                .setFooter({
-                    text: "Bot creado por DEVLVDARKKIDD"
-                })
-                .setTimestamp();
-
             return interaction.reply({
-                embeds: [embed]
+                content:
+                    `🔓 El usuario con ID \`${id}\` fue desbaneado.`
             });
         }
 
-        // =================================================
-        // LOCK
-        // =================================================
+        // ==========================
+        // /LOCK
+        // ==========================
 
         if (interaction.commandName === "lock") {
 
             await interaction.deferReply();
 
-            const puedeUsar =
+            const tienePermiso =
                 interaction.guild.ownerId === interaction.user.id ||
                 interaction.member.permissions.has(
                     PermissionFlagsBits.Administrator
@@ -516,45 +439,44 @@ client.on("interactionCreate", async interaction => {
                     PermissionFlagsBits.ManageChannels
                 );
 
-            if (!puedeUsar) {
+            if (!tienePermiso) {
 
                 return interaction.editReply({
                     content:
-                        "❌ No tienes permisos para bloquear este canal.\n\nBot creado por DEVLVDARKKIDD"
+                        "❌ Tú no tienes permisos para bloquear este canal."
                 });
             }
 
             const canal = interaction.channel;
 
-            const miembroBot =
+            const bot =
                 interaction.guild.members.me;
 
-            if (!miembroBot) {
+            if (!bot) {
+
                 return interaction.editReply({
                     content:
-                        "❌ No pude encontrar al bot dentro del servidor."
+                        "❌ No pude encontrar al bot en el servidor."
                 });
             }
 
-            const permisosBot =
-                canal.permissionsFor(miembroBot);
+            const permisos =
+                canal.permissionsFor(bot);
 
             if (
-                !permisosBot ||
-                !permisosBot.has(
-                    PermissionFlagsBits.ManageRoles
+                !permisos ||
+                !permisos.has(
+                    PermissionFlagsBits.ManageChannels
                 )
             ) {
+
                 return interaction.editReply({
                     content:
-                        "❌ El bot necesita el permiso **Gestionar roles**."
+                        "❌ El bot necesita el permiso **Gestionar canales**."
                 });
             }
 
-            // ---------------------------------------------
-            // BLOQUEAR @EVERYONE
-            // ---------------------------------------------
-
+            // Nadie puede escribir
             await canal.permissionOverwrites.edit(
                 interaction.guild.roles.everyone,
                 {
@@ -562,55 +484,11 @@ client.on("interactionCreate", async interaction => {
                 }
             );
 
-            // ---------------------------------------------
-            // BLOQUEAR TODOS LOS ROLES DEL SERVIDOR
-            // EXCEPTO OWNER
-            // ---------------------------------------------
-
-            const roles = interaction.guild.roles.cache;
-
-            for (const [roleId, role] of roles) {
-
-                if (role.id === interaction.guild.id) {
-                    continue;
-                }
-
-                if (role.id === OWNER_ROLE_ID) {
-                    continue;
-                }
-
-                // Ignoramos @everyone
-                if (role.id === interaction.guild.roles.everyone.id) {
-                    continue;
-                }
-
-                try {
-
-                    await canal.permissionOverwrites.edit(
-                        role.id,
-                        {
-                            SendMessages: false
-                        }
-                    );
-
-                } catch (error) {
-
-                    console.error(
-                        `No se pudo modificar el rol ${role.name}:`,
-                        error.message
-                    );
-                }
-            }
-
-            // ---------------------------------------------
-            // PERMITIR AL ROL OWNER
-            // ---------------------------------------------
-
+            // El rol Owner sí puede escribir
             await canal.permissionOverwrites.edit(
                 OWNER_ROLE_ID,
                 {
-                    SendMessages: true,
-                    ViewChannel: true
+                    SendMessages: true
                 }
             );
 
@@ -618,24 +496,13 @@ client.on("interactionCreate", async interaction => {
                 .setColor(0xED4245)
                 .setTitle("🔒 CANAL BLOQUEADO")
                 .setDescription(
-                    "El canal está bloqueado. Los usuarios pueden seguir viéndolo, pero no pueden enviar mensajes."
-                )
-                .addFields(
-                    {
-                        name: "👑 Acceso para escribir",
-                        value: "Solo el rol `『 𝐎𝐖𝐍𝐄𝐑 』`"
-                    },
-                    {
-                        name: "👁️ Visibilidad",
-                        value: "Todos pueden ver el canal."
-                    },
-                    {
-                        name: "🛡️ Bloqueado por",
-                        value: `${interaction.user}`
-                    }
+                    "El canal fue bloqueado.\n\n" +
+                    "👁️ Todos pueden seguir viendo el canal.\n" +
+                    "🚫 Los usuarios no pueden enviar mensajes.\n" +
+                    "👑 El Owner puede seguir escribiendo."
                 )
                 .setFooter({
-                    text: "Bot creado por DEVLVDARKKIDD"
+                    text: "La Orden Morada"
                 })
                 .setTimestamp();
 
@@ -644,15 +511,15 @@ client.on("interactionCreate", async interaction => {
             });
         }
 
-        // =================================================
-        // UNLOCK
-        // =================================================
+        // ==========================
+        // /UNLOCK
+        // ==========================
 
         if (interaction.commandName === "unlock") {
 
             await interaction.deferReply();
 
-            const puedeUsar =
+            const tienePermiso =
                 interaction.guild.ownerId === interaction.user.id ||
                 interaction.member.permissions.has(
                     PermissionFlagsBits.Administrator
@@ -661,19 +528,15 @@ client.on("interactionCreate", async interaction => {
                     PermissionFlagsBits.ManageChannels
                 );
 
-            if (!puedeUsar) {
+            if (!tienePermiso) {
 
                 return interaction.editReply({
                     content:
-                        "❌ No tienes permisos para desbloquear este canal.\n\nBot creado por DEVLVDARKKIDD"
+                        "❌ Tú no tienes permisos para desbloquear este canal."
                 });
             }
 
             const canal = interaction.channel;
-
-            // ---------------------------------------------
-            // QUITAR BLOQUEO DE @EVERYONE
-            // ---------------------------------------------
 
             await canal.permissionOverwrites.edit(
                 interaction.guild.roles.everyone,
@@ -682,52 +545,21 @@ client.on("interactionCreate", async interaction => {
                 }
             );
 
-            // ---------------------------------------------
-            // QUITAR BLOQUEO DE TODOS LOS ROLES
-            // ---------------------------------------------
-
-            const roles = interaction.guild.roles.cache;
-
-            for (const [roleId, role] of roles) {
-
-                if (role.id === interaction.guild.id) {
-                    continue;
+            await canal.permissionOverwrites.edit(
+                OWNER_ROLE_ID,
+                {
+                    SendMessages: null
                 }
-
-                if (role.id === interaction.guild.roles.everyone.id) {
-                    continue;
-                }
-
-                try {
-
-                    await canal.permissionOverwrites.edit(
-                        roleId,
-                        {
-                            SendMessages: null
-                        }
-                    );
-
-                } catch (error) {
-
-                    console.error(
-                        `No se pudo restaurar el rol ${role.name}:`,
-                        error.message
-                    );
-                }
-            }
+            );
 
             const embed = new EmbedBuilder()
                 .setColor(0x57F287)
                 .setTitle("🔓 CANAL DESBLOQUEADO")
                 .setDescription(
-                    "El canal vuelve a permitir el envío de mensajes."
+                    "El canal volvió a permitir mensajes."
                 )
-                .addFields({
-                    name: "🛡️ Desbloqueado por",
-                    value: `${interaction.user}`
-                })
                 .setFooter({
-                    text: "Bot creado por DEVLVDARKKIDD"
+                    text: "La Orden Morada"
                 })
                 .setTimestamp();
 
@@ -738,15 +570,7 @@ client.on("interactionCreate", async interaction => {
 
     } catch (error) {
 
-        console.error(
-            "❌ ERROR DEL COMANDO:",
-            error
-        );
-
-        const mensaje =
-            error.code === 50013
-                ? "❌ Discord rechazó la acción por falta de permisos."
-                : `❌ Ocurrió un error: \`${error.message || "Error desconocido"}\``;
+        console.error("❌ ERROR:", error);
 
         try {
 
@@ -756,35 +580,37 @@ client.on("interactionCreate", async interaction => {
             ) {
 
                 await interaction.editReply({
-                    content: mensaje,
-                    embeds: []
+                    content:
+                        "❌ Ocurrió un error al ejecutar el comando."
                 });
 
             } else {
 
                 await interaction.reply({
-                    content: mensaje,
+                    content:
+                        "❌ Ocurrió un error al ejecutar el comando.",
                     ephemeral: true
                 });
             }
 
-        } catch (replyError) {
+        } catch (errorRespuesta) {
 
             console.error(
                 "❌ No se pudo responder a Discord:",
-                replyError
+                errorRespuesta
             );
         }
     }
 });
 
-// =====================================================
-// INICIO
-// =====================================================
+// ==============================
+// INICIAR
+// ==============================
 
 if (!TOKEN) {
+
     console.error(
-        "❌ Falta DISCORD_TOKEN en las variables de entorno."
+        "❌ No existe la variable DISCORD_TOKEN en Render."
     );
 
     process.exit(1);
