@@ -17,17 +17,14 @@ const http = require("http");
 const CLIENT_ID = "1552817688378605650";
 const TOKEN = process.env.DISCORD_TOKEN;
 
-// Rol Owner
 const OWNER_ROLE_ID = "1531489394127536188";
 
-// Canal de bienvenida
 const WELCOME_CHANNEL_ID = "1531493723840450580";
 
-// Canal de logs
 const LOG_CHANNEL_ID = "1544504719047917610";
 
 // =====================================================
-// SERVIDOR PARA RENDER
+// RENDER
 // =====================================================
 
 const PORT = process.env.PORT || 10000;
@@ -43,7 +40,7 @@ http.createServer((req, res) => {
 });
 
 // =====================================================
-// CLIENTE DISCORD
+// CLIENTE
 // =====================================================
 
 const client = new Client({
@@ -55,19 +52,22 @@ const client = new Client({
 });
 
 // =====================================================
-// FUNCIÓN PARA ENVIAR LOGS
+// ENVIAR LOG
 // =====================================================
 
 async function enviarLog(guild, embed) {
-
     try {
-
-        const canal = guild.channels.cache.get(
-            LOG_CHANNEL_ID
-        );
+        const canal = await guild.channels.fetch(LOG_CHANNEL_ID);
 
         if (!canal) {
-            console.log("❌ No encontré el canal de logs.");
+            console.log(
+                `❌ No existe el canal de logs ${LOG_CHANNEL_ID}`
+            );
+            return;
+        }
+
+        if (!canal.isTextBased()) {
+            console.log("❌ El canal de logs no es un canal de texto.");
             return;
         }
 
@@ -75,10 +75,11 @@ async function enviarLog(guild, embed) {
             embeds: [embed]
         });
 
-    } catch (error) {
+        console.log("📋 Log enviado correctamente.");
 
+    } catch (error) {
         console.error(
-            "❌ Error enviando log:",
+            "❌ ERROR ENVIANDO LOG:",
             error
         );
     }
@@ -171,9 +172,7 @@ const rest = new REST({
 }).setToken(TOKEN);
 
 async function registrarComandos() {
-
     try {
-
         console.log("Registrando comandos...");
 
         await rest.put(
@@ -183,12 +182,9 @@ async function registrarComandos() {
             }
         );
 
-        console.log(
-            "✅ Comandos registrados correctamente."
-        );
+        console.log("✅ Comandos registrados correctamente.");
 
     } catch (error) {
-
         console.error(
             "❌ Error registrando comandos:",
             error
@@ -197,18 +193,207 @@ async function registrarComandos() {
 }
 
 // =====================================================
-// BOT CONECTADO
+// BOT LISTO
 // =====================================================
 
 client.once("clientReady", () => {
-
     console.log(
         `✅ Bot conectado como ${client.user.tag}`
+    );
+
+    console.log(
+        "🟢 Message Content Intent activado en el código."
+    );
+
+    console.log(
+        `📋 Canal de logs configurado: ${LOG_CHANNEL_ID}`
     );
 });
 
 // =====================================================
-// BIENVENIDAS
+// DIAGNÓSTICO DE MENSAJES
+// =====================================================
+
+client.on("messageCreate", message => {
+
+    if (!message.guild) return;
+
+    if (message.author?.bot) return;
+
+    console.log(
+        `📩 MENSAJE DETECTADO | ${message.author.tag} | #${message.channel.name} | ${message.content}`
+    );
+});
+
+// =====================================================
+// MENSAJE ELIMINADO
+// =====================================================
+
+client.on("messageDelete", async message => {
+
+    try {
+
+        if (!message.guild) return;
+
+        if (message.author?.bot) return;
+
+        console.log(
+            `🗑️ MENSAJE BORRADO | ${message.author?.tag || "Desconocido"} | #${message.channel?.name || "Desconocido"}`
+        );
+
+        let contenido =
+            message.content ||
+            "Contenido no disponible.";
+
+        if (contenido.length > 1000) {
+            contenido =
+                contenido.substring(0, 997) + "...";
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(0xED4245)
+            .setTitle("🗑️ MENSAJE ELIMINADO")
+            .setDescription(
+                "Se eliminó un mensaje del servidor."
+            )
+            .addFields(
+                {
+                    name: "👤 Usuario",
+                    value: message.author
+                        ? `${message.author} \`${message.author.tag}\``
+                        : "Desconocido"
+                },
+                {
+                    name: "📍 Canal",
+                    value: message.channel
+                        ? `${message.channel}`
+                        : "Desconocido"
+                },
+                {
+                    name: "💬 Mensaje",
+                    value: `\`\`\`\n${contenido}\n\`\`\``
+                }
+            )
+            .setTimestamp();
+
+        if (message.author) {
+            embed.setThumbnail(
+                message.author.displayAvatarURL({
+                    extension: "png",
+                    size: 256
+                })
+            );
+        }
+
+        await enviarLog(
+            message.guild,
+            embed
+        );
+
+    } catch (error) {
+
+        console.error(
+            "❌ ERROR EN MESSAGE DELETE:",
+            error
+        );
+    }
+});
+
+// =====================================================
+// MENSAJE EDITADO
+// =====================================================
+
+client.on("messageUpdate", async (oldMessage, newMessage) => {
+
+    try {
+
+        if (!oldMessage.guild) return;
+
+        if (oldMessage.author?.bot) return;
+
+        if (
+            oldMessage.content ===
+            newMessage.content
+        ) {
+            return;
+        }
+
+        console.log(
+            `✏️ MENSAJE EDITADO | ${oldMessage.author?.tag || "Desconocido"} | #${oldMessage.channel?.name || "Desconocido"}`
+        );
+
+        let antes =
+            oldMessage.content ||
+            "Contenido no disponible.";
+
+        let despues =
+            newMessage.content ||
+            "Contenido no disponible.";
+
+        if (antes.length > 900) {
+            antes =
+                antes.substring(0, 897) + "...";
+        }
+
+        if (despues.length > 900) {
+            despues =
+                despues.substring(0, 897) + "...";
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(0xF1C40F)
+            .setTitle("✏️ MENSAJE EDITADO")
+            .addFields(
+                {
+                    name: "👤 Usuario",
+                    value: oldMessage.author
+                        ? `${oldMessage.author} \`${oldMessage.author.tag}\``
+                        : "Desconocido"
+                },
+                {
+                    name: "📍 Canal",
+                    value: oldMessage.channel
+                        ? `${oldMessage.channel}`
+                        : "Desconocido"
+                },
+                {
+                    name: "🔴 Antes",
+                    value:
+                        `\`\`\`\n${antes}\n\`\`\``
+                },
+                {
+                    name: "🟢 Después",
+                    value:
+                        `\`\`\`\n${despues}\n\`\`\``
+                }
+            )
+            .setTimestamp();
+
+        if (oldMessage.author) {
+            embed.setThumbnail(
+                oldMessage.author.displayAvatarURL({
+                    extension: "png",
+                    size: 256
+                })
+            );
+        }
+
+        await enviarLog(
+            oldMessage.guild,
+            embed
+        );
+
+    } catch (error) {
+
+        console.error(
+            "❌ ERROR EN MESSAGE UPDATE:",
+            error
+        );
+    }
+});
+
+// =====================================================
+// BIENVENIDA
 // =====================================================
 
 client.on("guildMemberAdd", async member => {
@@ -216,11 +401,11 @@ client.on("guildMemberAdd", async member => {
     try {
 
         const canal =
-            member.guild.channels.cache.get(
+            await member.guild.channels.fetch(
                 WELCOME_CHANNEL_ID
             );
 
-        if (!canal) {
+        if (!canal || !canal.isTextBased()) {
             console.log(
                 "❌ No encontré el canal de bienvenida."
             );
@@ -253,28 +438,22 @@ client.on("guildMemberAdd", async member => {
             embeds: [embed]
         });
 
-        console.log(
-            `👋 Bienvenida enviada para ${member.user.tag}`
-        );
-
-        // LOG DE ENTRADA
-        const logEmbed =
-            new EmbedBuilder()
-                .setColor(0x57F287)
-                .setTitle("📥 USUARIO ENTRÓ")
-                .setThumbnail(avatar)
-                .addFields(
-                    {
-                        name: "👤 Usuario",
-                        value:
-                            `${member.user} \`${member.user.tag}\``
-                    },
-                    {
-                        name: "🆔 ID",
-                        value: member.id
-                    }
-                )
-                .setTimestamp();
+        const logEmbed = new EmbedBuilder()
+            .setColor(0x57F287)
+            .setTitle("📥 USUARIO ENTRÓ")
+            .setThumbnail(avatar)
+            .addFields(
+                {
+                    name: "👤 Usuario",
+                    value:
+                        `${member.user} \`${member.user.tag}\``
+                },
+                {
+                    name: "🆔 ID",
+                    value: member.id
+                }
+            )
+            .setTimestamp();
 
         await enviarLog(
             member.guild,
@@ -284,7 +463,7 @@ client.on("guildMemberAdd", async member => {
     } catch (error) {
 
         console.error(
-            "❌ Error en bienvenida:",
+            "❌ ERROR EN BIENVENIDA:",
             error
         );
     }
@@ -304,23 +483,22 @@ client.on("guildMemberRemove", async member => {
                 size: 1024
             });
 
-        const embed =
-            new EmbedBuilder()
-                .setColor(0xED4245)
-                .setTitle("📤 USUARIO SALIÓ")
-                .setThumbnail(avatar)
-                .addFields(
-                    {
-                        name: "👤 Usuario",
-                        value:
-                            `${member.user} \`${member.user.tag}\``
-                    },
-                    {
-                        name: "🆔 ID",
-                        value: member.id
-                    }
-                )
-                .setTimestamp();
+        const embed = new EmbedBuilder()
+            .setColor(0xED4245)
+            .setTitle("📤 USUARIO SALIÓ")
+            .setThumbnail(avatar)
+            .addFields(
+                {
+                    name: "👤 Usuario",
+                    value:
+                        `${member.user} \`${member.user.tag}\``
+                },
+                {
+                    name: "🆔 ID",
+                    value: member.id
+                }
+            )
+            .setTimestamp();
 
         await enviarLog(
             member.guild,
@@ -330,147 +508,7 @@ client.on("guildMemberRemove", async member => {
     } catch (error) {
 
         console.error(
-            "❌ Error en log de salida:",
-            error
-        );
-    }
-});
-
-// =====================================================
-// MENSAJE ELIMINADO
-// =====================================================
-
-client.on("messageDelete", async message => {
-
-    try {
-
-        if (!message.guild) return;
-
-        if (message.author?.bot) return;
-
-        let contenido =
-            message.content || "Contenido no disponible";
-
-        if (contenido.length > 1000) {
-            contenido =
-                contenido.substring(0, 997) + "...";
-        }
-
-        const embed =
-            new EmbedBuilder()
-                .setColor(0xED4245)
-                .setTitle("🗑️ MENSAJE ELIMINADO")
-                .addFields(
-                    {
-                        name: "👤 Usuario",
-                        value:
-                            message.author
-                                ? `${message.author}`
-                                : "Usuario desconocido"
-                    },
-                    {
-                        name: "📍 Canal",
-                        value:
-                            `${message.channel}`
-                    },
-                    {
-                        name: "💬 Contenido",
-                        value:
-                            `\`\`\`\n${contenido}\n\`\`\``
-                    }
-                )
-                .setTimestamp();
-
-        await enviarLog(
-            message.guild,
-            embed
-        );
-
-    } catch (error) {
-
-        console.error(
-            "❌ Error en mensaje eliminado:",
-            error
-        );
-    }
-});
-
-// =====================================================
-// MENSAJE EDITADO
-// =====================================================
-
-client.on("messageUpdate", async (oldMessage, newMessage) => {
-
-    try {
-
-        if (!oldMessage.guild) return;
-
-        if (oldMessage.author?.bot) return;
-
-        if (
-            oldMessage.content ===
-            newMessage.content
-        ) {
-            return;
-        }
-
-        let antes =
-            oldMessage.content ||
-            "Contenido no disponible";
-
-        let despues =
-            newMessage.content ||
-            "Contenido no disponible";
-
-        if (antes.length > 900) {
-            antes =
-                antes.substring(0, 897) + "...";
-        }
-
-        if (despues.length > 900) {
-            despues =
-                despues.substring(0, 897) + "...";
-        }
-
-        const embed =
-            new EmbedBuilder()
-                .setColor(0xF1C40F)
-                .setTitle("✏️ MENSAJE EDITADO")
-                .addFields(
-                    {
-                        name: "👤 Usuario",
-                        value:
-                            oldMessage.author
-                                ? `${oldMessage.author}`
-                                : "Usuario desconocido"
-                    },
-                    {
-                        name: "📍 Canal",
-                        value:
-                            `${oldMessage.channel}`
-                    },
-                    {
-                        name: "🔴 Antes",
-                        value:
-                            `\`\`\`\n${antes}\n\`\`\``
-                    },
-                    {
-                        name: "🟢 Después",
-                        value:
-                            `\`\`\`\n${despues}\n\`\`\``
-                    }
-                )
-                .setTimestamp();
-
-        await enviarLog(
-            oldMessage.guild,
-            embed
-        );
-
-    } catch (error) {
-
-        console.error(
-            "❌ Error en mensaje editado:",
+            "❌ ERROR EN SALIDA:",
             error
         );
     }
@@ -488,46 +526,43 @@ client.on("interactionCreate", async interaction => {
 
     try {
 
-        // =============================================
+        // =================================================
         // /IP
-        // =============================================
+        // =================================================
 
         if (interaction.commandName === "ip") {
 
-            const embed =
-                new EmbedBuilder()
-                    .setColor(0x57F287)
-                    .setTitle(
-                        "🎮 SERVIDOR DE MINECRAFT"
-                    )
-                    .setDescription(
-                        "Conectate al servidor usando estos datos:"
-                    )
-                    .addFields(
-                        {
-                            name: "🌐 IP",
-                            value:
-                                "`mc.laordenmorada.lat`"
-                        },
-                        {
-                            name: "🔌 PUERTO",
-                            value:
-                                "`19527`"
-                        }
-                    )
-                    .setFooter({
-                        text: "La Orden Morada"
-                    })
-                    .setTimestamp();
+            const embed = new EmbedBuilder()
+                .setColor(0x57F287)
+                .setTitle("🎮 SERVIDOR DE MINECRAFT")
+                .setDescription(
+                    "Conectate al servidor usando estos datos:"
+                )
+                .addFields(
+                    {
+                        name: "🌐 IP",
+                        value:
+                            "`mc.laordenmorada.lat`"
+                    },
+                    {
+                        name: "🔌 PUERTO",
+                        value:
+                            "`19527`"
+                    }
+                )
+                .setFooter({
+                    text: "La Orden Morada"
+                })
+                .setTimestamp();
 
             return interaction.reply({
                 embeds: [embed]
             });
         }
 
-        // =============================================
+        // =================================================
         // /BAN
-        // =============================================
+        // =================================================
 
         if (interaction.commandName === "ban") {
 
@@ -546,67 +581,42 @@ client.on("interactionCreate", async interaction => {
                     `Ban aplicado por ${interaction.user.tag}`
             });
 
-            const embed =
-                new EmbedBuilder()
-                    .setColor(0xED4245)
-                    .setTitle(
-                        "🔨 USUARIO BANEADO"
-                    )
-                    .addFields(
-                        {
-                            name: "👤 Usuario",
-                            value:
-                                `${usuario}`
-                        },
-                        {
-                            name: "🛡️ Moderador",
-                            value:
-                                `${interaction.user}`
-                        }
-                    )
-                    .setTimestamp();
-
             await interaction.reply({
-                embeds: [embed]
+                content:
+                    `🔨 ${usuario} fue baneado correctamente.`
             });
 
-            // LOG
-            const logEmbed =
-                new EmbedBuilder()
-                    .setColor(0xED4245)
-                    .setTitle(
-                        "🔨 USUARIO BANEADO"
-                    )
-                    .addFields(
-                        {
-                            name: "👤 Usuario",
-                            value:
-                                `${usuario}`
-                        },
-                        {
-                            name: "🛡️ Moderador",
-                            value:
-                                `${interaction.user}`
-                        },
-                        {
-                            name: "🆔 ID",
-                            value:
-                                usuario.id
-                        }
-                    )
-                    .setTimestamp();
+            const embed = new EmbedBuilder()
+                .setColor(0xED4245)
+                .setTitle("🔨 USUARIO BANEADO")
+                .addFields(
+                    {
+                        name: "👤 Usuario",
+                        value: `${usuario}`
+                    },
+                    {
+                        name: "🆔 ID",
+                        value: usuario.id
+                    },
+                    {
+                        name: "🛡️ Moderador",
+                        value:
+                            `${interaction.user}`
+                    }
+                )
+                .setTimestamp();
 
             await enviarLog(
                 interaction.guild,
-                logEmbed
+                embed
             );
 
             return;
         }
 
-        // =============================================
+        // =================================================
         // /MUTE
-        // =============================================
+        // =================================================
 
         if (interaction.commandName === "mute") {
 
@@ -625,17 +635,16 @@ client.on("interactionCreate", async interaction => {
                     usuario.id
                 );
 
-            const regex =
-                /^(\d+)(s|m|h|d)$/i;
-
             const match =
-                duracion.match(regex);
+                duracion.match(
+                    /^(\d+)(s|m|h|d)$/i
+                );
 
             if (!match) {
 
                 return interaction.reply({
                     content:
-                        "❌ Duración inválida. Usa `30s`, `5m`, `1h` o `1d`.",
+                        "❌ Usa `30s`, `5m`, `1h` o `1d`.",
                     ephemeral: true
                 });
             }
@@ -668,7 +677,7 @@ client.on("interactionCreate", async interaction => {
 
                 return interaction.reply({
                     content:
-                        "❌ El máximo permitido por Discord es de 28 días.",
+                        "❌ El máximo es de 28 días.",
                     ephemeral: true
                 });
             }
@@ -678,72 +687,42 @@ client.on("interactionCreate", async interaction => {
                 `Mute aplicado por ${interaction.user.tag}`
             );
 
-            const embed =
-                new EmbedBuilder()
-                    .setColor(0x5865F2)
-                    .setTitle(
-                        "🔇 USUARIO SILENCIADO"
-                    )
-                    .addFields(
-                        {
-                            name: "👤 Usuario",
-                            value:
-                                `${usuario}`
-                        },
-                        {
-                            name: "⏱️ Duración",
-                            value:
-                                duracion
-                        },
-                        {
-                            name: "🛡️ Moderador",
-                            value:
-                                `${interaction.user}`
-                        }
-                    )
-                    .setTimestamp();
-
             await interaction.reply({
-                embeds: [embed]
+                content:
+                    `🔇 ${usuario} fue silenciado durante ${duracion}.`
             });
 
-            // LOG
-            const logEmbed =
-                new EmbedBuilder()
-                    .setColor(0x5865F2)
-                    .setTitle(
-                        "🔇 USUARIO SILENCIADO"
-                    )
-                    .addFields(
-                        {
-                            name: "👤 Usuario",
-                            value:
-                                `${usuario}`
-                        },
-                        {
-                            name: "⏱️ Duración",
-                            value:
-                                duracion
-                        },
-                        {
-                            name: "🛡️ Moderador",
-                            value:
-                                `${interaction.user}`
-                        }
-                    )
-                    .setTimestamp();
+            const embed = new EmbedBuilder()
+                .setColor(0x5865F2)
+                .setTitle("🔇 USUARIO SILENCIADO")
+                .addFields(
+                    {
+                        name: "👤 Usuario",
+                        value: `${usuario}`
+                    },
+                    {
+                        name: "⏱️ Duración",
+                        value: duracion
+                    },
+                    {
+                        name: "🛡️ Moderador",
+                        value:
+                            `${interaction.user}`
+                    }
+                )
+                .setTimestamp();
 
             await enviarLog(
                 interaction.guild,
-                logEmbed
+                embed
             );
 
             return;
         }
 
-        // =============================================
+        // =================================================
         // /UNMUTE
-        // =============================================
+        // =================================================
 
         if (interaction.commandName === "unmute") {
 
@@ -767,25 +746,21 @@ client.on("interactionCreate", async interaction => {
                     `🔊 ${usuario} ya puede volver a hablar.`
             });
 
-            const embed =
-                new EmbedBuilder()
-                    .setColor(0x57F287)
-                    .setTitle(
-                        "🔊 MUTE QUITADO"
-                    )
-                    .addFields(
-                        {
-                            name: "👤 Usuario",
-                            value:
-                                `${usuario}`
-                        },
-                        {
-                            name: "🛡️ Moderador",
-                            value:
-                                `${interaction.user}`
-                        }
-                    )
-                    .setTimestamp();
+            const embed = new EmbedBuilder()
+                .setColor(0x57F287)
+                .setTitle("🔊 MUTE QUITADO")
+                .addFields(
+                    {
+                        name: "👤 Usuario",
+                        value: `${usuario}`
+                    },
+                    {
+                        name: "🛡️ Moderador",
+                        value:
+                            `${interaction.user}`
+                    }
+                )
+                .setTimestamp();
 
             await enviarLog(
                 interaction.guild,
@@ -795,9 +770,9 @@ client.on("interactionCreate", async interaction => {
             return;
         }
 
-        // =============================================
+        // =================================================
         // /UNBAN
-        // =============================================
+        // =================================================
 
         if (interaction.commandName === "unban") {
 
@@ -816,25 +791,21 @@ client.on("interactionCreate", async interaction => {
                     `🔓 El usuario con ID \`${id}\` fue desbaneado.`
             });
 
-            const embed =
-                new EmbedBuilder()
-                    .setColor(0x57F287)
-                    .setTitle(
-                        "🔓 USUARIO DESBANEADO"
-                    )
-                    .addFields(
-                        {
-                            name: "🆔 ID",
-                            value:
-                                id
-                        },
-                        {
-                            name: "🛡️ Moderador",
-                            value:
-                                `${interaction.user}`
-                        }
-                    )
-                    .setTimestamp();
+            const embed = new EmbedBuilder()
+                .setColor(0x57F287)
+                .setTitle("🔓 USUARIO DESBANEADO")
+                .addFields(
+                    {
+                        name: "🆔 ID",
+                        value: id
+                    },
+                    {
+                        name: "🛡️ Moderador",
+                        value:
+                            `${interaction.user}`
+                    }
+                )
+                .setTimestamp();
 
             await enviarLog(
                 interaction.guild,
@@ -844,9 +815,9 @@ client.on("interactionCreate", async interaction => {
             return;
         }
 
-        // =============================================
+        // =================================================
         // /LOCK
-        // =============================================
+        // =================================================
 
         if (interaction.commandName === "lock") {
 
@@ -880,7 +851,7 @@ client.on("interactionCreate", async interaction => {
 
                 return interaction.editReply({
                     content:
-                        "❌ No pude encontrar al bot en el servidor."
+                        "❌ No pude encontrar al bot."
                 });
             }
 
@@ -896,7 +867,7 @@ client.on("interactionCreate", async interaction => {
 
                 return interaction.editReply({
                     content:
-                        "❌ El bot necesita el permiso **Gestionar canales**."
+                        "❌ El bot necesita **Gestionar canales**."
                 });
             }
 
@@ -914,44 +885,35 @@ client.on("interactionCreate", async interaction => {
                 }
             );
 
-            const embed =
-                new EmbedBuilder()
-                    .setColor(0xED4245)
-                    .setTitle(
-                        "🔒 CANAL BLOQUEADO"
-                    )
-                    .setDescription(
-                        "El canal fue bloqueado.\n\n" +
-                        "👁️ Todos pueden seguir viendo el canal.\n" +
-                        "🚫 Los usuarios no pueden enviar mensajes.\n" +
-                        "👑 El Owner puede seguir escribiendo."
-                    )
-                    .setTimestamp();
+            const embed = new EmbedBuilder()
+                .setColor(0xED4245)
+                .setTitle("🔒 CANAL BLOQUEADO")
+                .setDescription(
+                    "🚫 Nadie puede enviar mensajes.\n" +
+                    "👁️ Todos pueden seguir viendo el canal.\n" +
+                    "👑 El Owner puede escribir."
+                )
+                .setTimestamp();
 
             await interaction.editReply({
                 embeds: [embed]
             });
 
-            // LOG
-            const logEmbed =
-                new EmbedBuilder()
-                    .setColor(0xED4245)
-                    .setTitle(
-                        "🔒 CANAL BLOQUEADO"
-                    )
-                    .addFields(
-                        {
-                            name: "📍 Canal",
-                            value:
-                                `${canal}`
-                        },
-                        {
-                            name: "🛡️ Moderador",
-                            value:
-                                `${interaction.user}`
-                        }
-                    )
-                    .setTimestamp();
+            const logEmbed = new EmbedBuilder()
+                .setColor(0xED4245)
+                .setTitle("🔒 CANAL BLOQUEADO")
+                .addFields(
+                    {
+                        name: "📍 Canal",
+                        value: `${canal}`
+                    },
+                    {
+                        name: "🛡️ Moderador",
+                        value:
+                            `${interaction.user}`
+                    }
+                )
+                .setTimestamp();
 
             await enviarLog(
                 interaction.guild,
@@ -961,9 +923,9 @@ client.on("interactionCreate", async interaction => {
             return;
         }
 
-        // =============================================
+        // =================================================
         // /UNLOCK
-        // =============================================
+        // =================================================
 
         if (interaction.commandName === "unlock") {
 
@@ -1004,41 +966,33 @@ client.on("interactionCreate", async interaction => {
                 }
             );
 
-            const embed =
-                new EmbedBuilder()
-                    .setColor(0x57F287)
-                    .setTitle(
-                        "🔓 CANAL DESBLOQUEADO"
-                    )
-                    .setDescription(
-                        "El canal volvió a permitir mensajes."
-                    )
-                    .setTimestamp();
+            const embed = new EmbedBuilder()
+                .setColor(0x57F287)
+                .setTitle("🔓 CANAL DESBLOQUEADO")
+                .setDescription(
+                    "El canal volvió a permitir mensajes."
+                )
+                .setTimestamp();
 
             await interaction.editReply({
                 embeds: [embed]
             });
 
-            // LOG
-            const logEmbed =
-                new EmbedBuilder()
-                    .setColor(0x57F287)
-                    .setTitle(
-                        "🔓 CANAL DESBLOQUEADO"
-                    )
-                    .addFields(
-                        {
-                            name: "📍 Canal",
-                            value:
-                                `${canal}`
-                        },
-                        {
-                            name: "🛡️ Moderador",
-                            value:
-                                `${interaction.user}`
-                        }
-                    )
-                    .setTimestamp();
+            const logEmbed = new EmbedBuilder()
+                .setColor(0x57F287)
+                .setTitle("🔓 CANAL DESBLOQUEADO")
+                .addFields(
+                    {
+                        name: "📍 Canal",
+                        value: `${canal}`
+                    },
+                    {
+                        name: "🛡️ Moderador",
+                        value:
+                            `${interaction.user}`
+                    }
+                )
+                .setTimestamp();
 
             await enviarLog(
                 interaction.guild,
@@ -1079,7 +1033,7 @@ client.on("interactionCreate", async interaction => {
         } catch (replyError) {
 
             console.error(
-                "❌ No se pudo responder a Discord:",
+                "❌ ERROR RESPONDIENDO:",
                 replyError
             );
         }
@@ -1093,7 +1047,7 @@ client.on("interactionCreate", async interaction => {
 if (!TOKEN) {
 
     console.error(
-        "❌ Falta DISCORD_TOKEN en las variables de entorno de Render."
+        "❌ Falta DISCORD_TOKEN en Render."
     );
 
     process.exit(1);
