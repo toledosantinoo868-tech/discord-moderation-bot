@@ -11,20 +11,18 @@ const {
 const http = require("http");
 
 // =====================================================
-// RENDER - SERVIDOR HTTP
+// RENDER
 // =====================================================
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
-const server = http.createServer((req, res) => {
+http.createServer((req, res) => {
     res.writeHead(200, {
         "Content-Type": "text/plain; charset=utf-8"
     });
 
     res.end("Discord bot online");
-});
-
-server.listen(PORT, "0.0.0.0", () => {
+}).listen(PORT, "0.0.0.0", () => {
     console.log(`🌐 Servidor HTTP escuchando en el puerto ${PORT}`);
 });
 
@@ -66,11 +64,7 @@ function convertirDuracion(texto) {
         };
     }
 
-    const regex = /(\d+)(mo|y|w|d|h|m|s)/g;
-
-    let match;
-    let total = 0;
-    let encontrado = false;
+    const regex = /(\d+)(y|mo|w|d|h|m|s)/g;
 
     const unidades = {
         s: 1000,
@@ -82,6 +76,11 @@ function convertirDuracion(texto) {
         y: 365 * 24 * 60 * 60 * 1000
     };
 
+    let match;
+    let total = 0;
+    let encontrado = false;
+    let longitud = 0;
+
     while ((match = regex.exec(texto)) !== null) {
         encontrado = true;
 
@@ -89,18 +88,10 @@ function convertirDuracion(texto) {
         const unidad = match[2];
 
         total += cantidad * unidades[unidad];
+        longitud += match[0].length;
     }
 
-    if (!encontrado || total <= 0) {
-        return null;
-    }
-
-    const textoLimpio = texto.replace(
-        /(\d+)(mo|y|w|d|h|m|s)/g,
-        ""
-    );
-
-    if (textoLimpio.length > 0) {
+    if (!encontrado || longitud !== texto.length || total <= 0) {
         return null;
     }
 
@@ -150,12 +141,12 @@ function formatearDuracion(ms) {
 
 const commands = [
 
-    // /IP - PÚBLICO
+    // IP
     new SlashCommandBuilder()
         .setName("ip")
         .setDescription("Muestra la IP del servidor de Minecraft."),
 
-    // /BAN
+    // BAN
     new SlashCommandBuilder()
         .setName("ban")
         .setDescription("Banea a un usuario.")
@@ -165,20 +156,14 @@ const commands = [
                 .setDescription("Usuario que quieres banear")
                 .setRequired(true)
         )
-        .addStringOption(option =>
-            option
-                .setName("duracion")
-                .setDescription("Ejemplo: 10m, 2h, 7d")
-                .setRequired(false)
-        )
         .setDefaultMemberPermissions(
             PermissionFlagsBits.BanMembers
         ),
 
-    // /MUTE
+    // MUTE
     new SlashCommandBuilder()
         .setName("mute")
-        .setDescription("Silencia a un usuario.")
+        .setDescription("Silencia temporalmente a un usuario.")
         .addUserOption(option =>
             option
                 .setName("usuario")
@@ -197,7 +182,7 @@ const commands = [
             PermissionFlagsBits.ModerateMembers
         ),
 
-    // /UNMUTE
+    // UNMUTE
     new SlashCommandBuilder()
         .setName("unmute")
         .setDescription("Quita el silencio a un usuario.")
@@ -211,7 +196,7 @@ const commands = [
             PermissionFlagsBits.ModerateMembers
         ),
 
-    // /UNBAN
+    // UNBAN
     new SlashCommandBuilder()
         .setName("unban")
         .setDescription("Desbanea a un usuario mediante su ID.")
@@ -225,7 +210,7 @@ const commands = [
             PermissionFlagsBits.BanMembers
         ),
 
-    // /LOCK
+    // LOCK
     new SlashCommandBuilder()
         .setName("lock")
         .setDescription("Bloquea el canal actual.")
@@ -233,7 +218,7 @@ const commands = [
             PermissionFlagsBits.ManageChannels
         ),
 
-    // /UNLOCK
+    // UNLOCK
     new SlashCommandBuilder()
         .setName("unlock")
         .setDescription("Desbloquea el canal actual.")
@@ -244,17 +229,19 @@ const commands = [
 ].map(command => command.toJSON());
 
 // =====================================================
-// REGISTRAR COMANDOS
+// REST
 // =====================================================
 
 const rest = new REST({
     version: "10"
 }).setToken(TOKEN);
 
+// =====================================================
+// REGISTRAR COMANDOS
+// =====================================================
+
 async function registrarComandos() {
-
     try {
-
         console.log("Registrando comandos...");
 
         await rest.put(
@@ -267,7 +254,6 @@ async function registrarComandos() {
         console.log("✅ Comandos registrados correctamente.");
 
     } catch (error) {
-
         console.error(
             "❌ Error registrando comandos:",
             error
@@ -276,15 +262,13 @@ async function registrarComandos() {
 }
 
 // =====================================================
-// BOT LISTO
+// BOT READY
 // =====================================================
 
 client.once("clientReady", () => {
-
     console.log(
         `✅ Bot conectado como ${client.user.tag}`
     );
-
 });
 
 // =====================================================
@@ -293,9 +277,7 @@ client.once("clientReady", () => {
 
 client.on("interactionCreate", async interaction => {
 
-    if (!interaction.isChatInputCommand()) {
-        return;
-    }
+    if (!interaction.isChatInputCommand()) return;
 
     try {
 
@@ -328,11 +310,9 @@ client.on("interactionCreate", async interaction => {
                 })
                 .setTimestamp();
 
-            await interaction.reply({
+            return interaction.reply({
                 embeds: [embed]
             });
-
-            return;
         }
 
         // =================================================
@@ -353,60 +333,51 @@ client.on("interactionCreate", async interaction => {
                 );
 
             if (usuario.id === interaction.user.id) {
-
                 return interaction.reply({
                     content:
                         "❌ No puedes silenciarte a ti mismo.",
                     ephemeral: true
                 });
-
             }
 
             if (usuario.id === interaction.guild.ownerId) {
-
                 return interaction.reply({
                     content:
                         "❌ No puedes silenciar al dueño del servidor.",
                     ephemeral: true
                 });
-
             }
 
             const duracion =
                 convertirDuracion(duracionTexto);
 
             if (!duracion) {
-
                 return interaction.reply({
                     content:
                         "❌ Duración inválida.\n\n" +
-                        "Ejemplos: `30s`, `5m`, `1h`, `24h`, `7d`, `2h30m` o `1d12h`.",
+                        "Ejemplos: `30s`, `5m`, `1h`, `24h`, `7d`, `2h30m`.",
                     ephemeral: true
                 });
-
             }
 
             if (duracion.permanente) {
-
                 return interaction.reply({
                     content:
-                        "⚠️ Discord permite un máximo de 28 días para los timeouts.",
+                        "⚠️ Discord no permite timeouts permanentes. " +
+                        "El máximo es de 28 días.",
                     ephemeral: true
                 });
-
             }
 
             const MAX_TIMEOUT =
                 28 * 24 * 60 * 60 * 1000;
 
             if (duracion.milisegundos > MAX_TIMEOUT) {
-
                 return interaction.reply({
                     content:
                         "❌ El máximo permitido por Discord es de **28 días**.",
                     ephemeral: true
                 });
-
             }
 
             await miembro.timeout(
@@ -424,7 +395,7 @@ client.on("interactionCreate", async interaction => {
                         inline: false
                     },
                     {
-                        name: "⏱️ Duración",
+                        name: "⏱️ Tiempo",
                         value: duracion.texto,
                         inline: true
                     },
@@ -439,11 +410,9 @@ client.on("interactionCreate", async interaction => {
                 })
                 .setTimestamp();
 
-            await interaction.reply({
+            return interaction.reply({
                 embeds: [embed]
             });
-
-            return;
         }
 
         // =================================================
@@ -485,11 +454,9 @@ client.on("interactionCreate", async interaction => {
                 })
                 .setTimestamp();
 
-            await interaction.reply({
+            return interaction.reply({
                 embeds: [embed]
             });
-
-            return;
         }
 
         // =================================================
@@ -531,11 +498,9 @@ client.on("interactionCreate", async interaction => {
                 })
                 .setTimestamp();
 
-            await interaction.reply({
+            return interaction.reply({
                 embeds: [embed]
             });
-
-            return;
         }
 
         // =================================================
@@ -572,11 +537,9 @@ client.on("interactionCreate", async interaction => {
                 })
                 .setTimestamp();
 
-            await interaction.reply({
+            return interaction.reply({
                 embeds: [embed]
             });
-
-            return;
         }
 
         // =================================================
@@ -585,9 +548,8 @@ client.on("interactionCreate", async interaction => {
 
         if (interaction.commandName === "lock") {
 
-            // ---------------------------------------------
-            // COMPROBAR PERMISOS DEL USUARIO
-            // ---------------------------------------------
+            // Responder inmediatamente a Discord
+            await interaction.deferReply();
 
             const puedeBloquear =
                 interaction.guild.ownerId === interaction.user.id ||
@@ -611,26 +573,19 @@ client.on("interactionCreate", async interaction => {
                     })
                     .setTimestamp();
 
-                return interaction.reply({
-                    embeds: [embed],
-                    ephemeral: true
+                return interaction.editReply({
+                    embeds: [embed]
                 });
             }
 
             const canal = interaction.channel;
 
             if (!canal) {
-
-                return interaction.reply({
+                return interaction.editReply({
                     content:
-                        "❌ No se pudo detectar el canal.",
-                    ephemeral: true
+                        "❌ No se pudo detectar el canal."
                 });
             }
-
-            // ---------------------------------------------
-            // COMPROBAR PERMISOS DEL BOT
-            // ---------------------------------------------
 
             const miembroBot =
                 interaction.guild.members.me;
@@ -645,58 +600,19 @@ client.on("interactionCreate", async interaction => {
                 )
             ) {
 
-                const embed = new EmbedBuilder()
-                    .setColor(0xED4245)
-                    .setTitle("❌ EL BOT NO TIENE PERMISOS")
-                    .setDescription(
-                        "Necesito el permiso **Gestionar canales** para bloquear este canal."
-                    )
-                    .setFooter({
-                        text: "Bot creado por DEVLVDARKKIDD"
-                    })
-                    .setTimestamp();
-
-                return interaction.reply({
-                    embeds: [embed],
-                    ephemeral: true
+                return interaction.editReply({
+                    content:
+                        "❌ El bot no tiene **Gestionar canales** en este canal."
                 });
             }
 
-            // ---------------------------------------------
-            // BLOQUEAR @EVERYONE
-            // ---------------------------------------------
-
+            // Bloquear únicamente a @everyone
             await canal.permissionOverwrites.edit(
                 interaction.guild.roles.everyone,
                 {
                     SendMessages: false
                 }
             );
-
-            // ---------------------------------------------
-            // PERMITIR ADMINISTRADORES Y
-            // GESTIONAR CANALES
-            // ---------------------------------------------
-
-            const rolesEspeciales =
-                interaction.guild.roles.cache.filter(role =>
-                    role.permissions.has(
-                        PermissionFlagsBits.Administrator
-                    ) ||
-                    role.permissions.has(
-                        PermissionFlagsBits.ManageChannels
-                    )
-                );
-
-            for (const [, role] of rolesEspeciales) {
-
-                await canal.permissionOverwrites.edit(
-                    role.id,
-                    {
-                        SendMessages: true
-                    }
-                );
-            }
 
             const embed = new EmbedBuilder()
                 .setColor(0xED4245)
@@ -706,17 +622,15 @@ client.on("interactionCreate", async interaction => {
                 )
                 .addFields(
                     {
-                        name: "🚫 Usuarios normales",
+                        name: "🚫 Usuarios",
                         value:
-                            "No pueden enviar mensajes.",
+                            "Los usuarios normales no pueden enviar mensajes.",
                         inline: false
                     },
                     {
-                        name: "👑 Pueden escribir",
+                        name: "👑 Administración",
                         value:
-                            "Dueño del servidor\n" +
-                            "Administradores\n" +
-                            "Usuarios con Gestionar canales",
+                            "Los administradores conservan el acceso.",
                         inline: false
                     },
                     {
@@ -730,11 +644,9 @@ client.on("interactionCreate", async interaction => {
                 })
                 .setTimestamp();
 
-            await interaction.reply({
+            return interaction.editReply({
                 embeds: [embed]
             });
-
-            return;
         }
 
         // =================================================
@@ -743,9 +655,8 @@ client.on("interactionCreate", async interaction => {
 
         if (interaction.commandName === "unlock") {
 
-            // ---------------------------------------------
-            // COMPROBAR PERMISOS DEL USUARIO
-            // ---------------------------------------------
+            // Responder inmediatamente a Discord
+            await interaction.deferReply();
 
             const puedeDesbloquear =
                 interaction.guild.ownerId === interaction.user.id ||
@@ -769,26 +680,19 @@ client.on("interactionCreate", async interaction => {
                     })
                     .setTimestamp();
 
-                return interaction.reply({
-                    embeds: [embed],
-                    ephemeral: true
+                return interaction.editReply({
+                    embeds: [embed]
                 });
             }
 
             const canal = interaction.channel;
 
             if (!canal) {
-
-                return interaction.reply({
+                return interaction.editReply({
                     content:
-                        "❌ No se pudo detectar el canal.",
-                    ephemeral: true
+                        "❌ No se pudo detectar el canal."
                 });
             }
-
-            // ---------------------------------------------
-            // COMPROBAR PERMISOS DEL BOT
-            // ---------------------------------------------
 
             const miembroBot =
                 interaction.guild.members.me;
@@ -803,57 +707,19 @@ client.on("interactionCreate", async interaction => {
                 )
             ) {
 
-                const embed = new EmbedBuilder()
-                    .setColor(0xED4245)
-                    .setTitle("❌ EL BOT NO TIENE PERMISOS")
-                    .setDescription(
-                        "Necesito el permiso **Gestionar canales** para desbloquear este canal."
-                    )
-                    .setFooter({
-                        text: "Bot creado por DEVLVDARKKIDD"
-                    })
-                    .setTimestamp();
-
-                return interaction.reply({
-                    embeds: [embed],
-                    ephemeral: true
+                return interaction.editReply({
+                    content:
+                        "❌ El bot no tiene **Gestionar canales** en este canal."
                 });
             }
 
-            // ---------------------------------------------
-            // DESBLOQUEAR @EVERYONE
-            // ---------------------------------------------
-
+            // Quitar el bloqueo de @everyone
             await canal.permissionOverwrites.edit(
                 interaction.guild.roles.everyone,
                 {
                     SendMessages: null
                 }
             );
-
-            // ---------------------------------------------
-            // QUITAR PERMISOS ESPECIALES CREADOS
-            // ---------------------------------------------
-
-            const rolesEspeciales =
-                interaction.guild.roles.cache.filter(role =>
-                    role.permissions.has(
-                        PermissionFlagsBits.Administrator
-                    ) ||
-                    role.permissions.has(
-                        PermissionFlagsBits.ManageChannels
-                    )
-                );
-
-            for (const [, role] of rolesEspeciales) {
-
-                await canal.permissionOverwrites.edit(
-                    role.id,
-                    {
-                        SendMessages: null
-                    }
-                );
-            }
 
             const embed = new EmbedBuilder()
                 .setColor(0x57F287)
@@ -871,11 +737,9 @@ client.on("interactionCreate", async interaction => {
                 })
                 .setTimestamp();
 
-            await interaction.reply({
+            return interaction.editReply({
                 embeds: [embed]
             });
-
-            return;
         }
 
     } catch (error) {
@@ -885,43 +749,43 @@ client.on("interactionCreate", async interaction => {
             error
         );
 
-        let mensaje;
+        const mensaje =
+            error.code === 50013
+                ? "❌ Discord rechazó la acción por falta de permisos. Revisá que el bot tenga **Gestionar canales** en este canal."
+                : `❌ Ocurrió un error: \`${error.message || "Error desconocido"}\``;
 
-        if (error.code === 50013) {
+        try {
 
-            mensaje =
-                "❌ Discord rechazó la acción por falta de permisos.\n" +
-                "Revisá que el bot tenga **Gestionar canales**.";
+            if (
+                interaction.deferred ||
+                interaction.replied
+            ) {
 
-        } else {
+                await interaction.editReply({
+                    content: mensaje,
+                    embeds: []
+                });
 
-            mensaje =
-                "❌ Ocurrió un error al ejecutar el comando.\n" +
-                `\`${error.message || "Error desconocido"}\``;
-        }
+            } else {
 
-        if (
-            interaction.replied ||
-            interaction.deferred
-        ) {
+                await interaction.reply({
+                    content: mensaje,
+                    ephemeral: true
+                });
+            }
 
-            await interaction.followUp({
-                content: mensaje,
-                ephemeral: true
-            }).catch(() => {});
+        } catch (replyError) {
 
-        } else {
-
-            await interaction.reply({
-                content: mensaje,
-                ephemeral: true
-            }).catch(() => {});
+            console.error(
+                "❌ No se pudo responder a Discord:",
+                replyError
+            );
         }
     }
 });
 
 // =====================================================
-// COMPROBAR TOKEN
+// TOKEN
 // =====================================================
 
 if (!TOKEN) {
