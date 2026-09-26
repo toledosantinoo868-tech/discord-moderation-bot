@@ -58,7 +58,6 @@ http.createServer((req, res) => {
     });
 
     res.end("Discord bot online");
-
 }).listen(PORT, "0.0.0.0", () => {
     console.log(`🌐 Servidor HTTP escuchando en el puerto ${PORT}`);
 });
@@ -74,7 +73,6 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent
     ],
-
     partials: [
         Partials.Message,
         Partials.Channel
@@ -82,10 +80,36 @@ const client = new Client({
 });
 
 // =====================================================
-// CACHE PARA LOGS
+// CACHE DE MENSAJES
 // =====================================================
 
 const messageCache = new Map();
+
+// =====================================================
+// WARNINGS
+// =====================================================
+
+const warnings = new Map();
+
+// =====================================================
+// ANTI-SPAM
+// =====================================================
+
+const spamTracker = new Map();
+
+const SPAM_LIMIT = 6;
+const SPAM_WINDOW = 5000;
+const SPAM_TIMEOUT = 5 * 60 * 1000;
+
+// =====================================================
+// LOCKS GENERALES
+// =====================================================
+
+const generalLocks = new Map();
+
+// =====================================================
+// GUARDAR MENSAJE
+// =====================================================
 
 function guardarMensaje(message) {
 
@@ -197,40 +221,109 @@ function esStaff(interaction) {
 }
 
 // =====================================================
+// PROTECCIÓN DE JERARQUÍA
+// =====================================================
+
+function puedeModerar(interaction, miembro) {
+
+    if (!miembro) return false;
+
+    if (miembro.id === interaction.user.id) {
+        return false;
+    }
+
+    if (miembro.id === interaction.client.user.id) {
+        return false;
+    }
+
+    if (interaction.guild.ownerId === miembro.id) {
+        return false;
+    }
+
+    if (interaction.guild.ownerId === interaction.user.id) {
+        return true;
+    }
+
+    const moderador =
+        interaction.member;
+
+    if (!moderador) return false;
+
+    if (
+        miembro.roles.highest.position >=
+        moderador.roles.highest.position
+    ) {
+        return false;
+    }
+
+    const bot =
+        interaction.guild.members.me;
+
+    if (
+        bot &&
+        miembro.roles.highest.position >=
+        bot.roles.highest.position
+    ) {
+        return false;
+    }
+
+    return true;
+}
+
+// =====================================================
+// DURACIÓN
+// =====================================================
+
+function convertirDuracion(texto) {
+
+    const match =
+        texto.match(/^(\d+)(s|m|h|d)$/i);
+
+    if (!match) return null;
+
+    const cantidad =
+        Number(match[1]);
+
+    const unidad =
+        match[2].toLowerCase();
+
+    const multiplicadores = {
+        s: 1000,
+        m: 60 * 1000,
+        h: 60 * 60 * 1000,
+        d: 24 * 60 * 60 * 1000
+    };
+
+    return cantidad * multiplicadores[unidad];
+}
+
+// =====================================================
 // PANEL DE VERIFICACIÓN
 // =====================================================
 
 function crearPanelVerificacion() {
 
-    const embed = new EmbedBuilder()
-        .setColor(0x8E44AD)
-        .setTitle("🛡️ VERIFICACIÓN — LA ORDEN MORADA")
-        .setDescription(
-            "¡Bienvenido/a a **La Orden Morada**! 💜\n\n" +
-
-            "Para acceder al servidor, primero tenés que verificarte.\n\n" +
-
-            "Al presionar **✅ Verificar**, aceptás respetar " +
-            "las reglas y normas de la comunidad.\n\n" +
-
-            "🔐 Una vez verificado/a, recibirás automáticamente " +
-            "el rol correspondiente y podrás acceder a los " +
-            "canales habilitados.\n\n" +
-
-            "📌 **Importante:**\n" +
-            "Si tenés algún problema con la verificación, " +
-            "contactá a un miembro del equipo de administración.\n\n" +
-
-            "💜 ¡Gracias por formar parte de **La Orden Morada**!\n\n" +
-
-            "━━━━━━━━━━━━━━━━━━━━\n\n" +
-
-            "🟢 **Presioná el botón de abajo para verificarte.**"
-        )
-        .setFooter({
-            text: "La Orden Morada • Verificación"
-        })
-        .setTimestamp();
+    const embed =
+        new EmbedBuilder()
+            .setColor(0x8E44AD)
+            .setTitle(
+                "🛡️ VERIFICACIÓN — LA ORDEN MORADA"
+            )
+            .setDescription(
+                "¡Bienvenido/a a **La Orden Morada**! 💜\n\n" +
+                "Para acceder al servidor, primero tenés que verificarte.\n\n" +
+                "Al presionar **✅ Verificar**, aceptás respetar las reglas y normas de la comunidad.\n\n" +
+                "🔐 Una vez verificado/a, recibirás automáticamente el rol correspondiente.\n\n" +
+                "📌 **Importante:**\n" +
+                "Si tenés algún problema con la verificación, contactá a un miembro del equipo de administración.\n\n" +
+                "💜 ¡Gracias por formar parte de **La Orden Morada**!\n\n" +
+                "━━━━━━━━━━━━━━━━━━━━\n\n" +
+                "🟢 **Presioná el botón de abajo para verificarte.**"
+            )
+            .setFooter({
+                text: "La Orden Morada • Verificación"
+            })
+            .setTimestamp();
 
     const boton =
         new ButtonBuilder()
@@ -255,38 +348,29 @@ function crearPanelVerificacion() {
 
 function crearPanelTickets() {
 
-    const embed = new EmbedBuilder()
-        .setColor(0x5865F2)
-        .setTitle("🎫 SOPORTE — LA ORDEN MORADA")
-        .setDescription(
-            "¿Necesitás ayuda? 💜\n\n" +
-
-            "Nuestro equipo está disponible para ayudarte " +
-            "con cualquier problema, duda o consulta relacionada " +
-            "con el servidor.\n\n" +
-
-            "🎫 **¿Cómo abrir un ticket?**\n" +
-            "Presioná el botón **🎫 Crear ticket** de abajo.\n\n" +
-
-            "🔒 El ticket será privado y solamente podrán verlo " +
-            "vos y el equipo encargado de atenderlo.\n\n" +
-
-            "📌 **Antes de abrir un ticket:**\n" +
-            "• Explicá claramente tu problema.\n" +
-            "• No abras tickets innecesarios.\n" +
-            "• Esperá a que un miembro del equipo responda.\n" +
-            "• No hagas spam dentro del ticket.\n\n" +
-
-            "💜 Nuestro equipo intentará ayudarte lo antes posible.\n\n" +
-
-            "━━━━━━━━━━━━━━━━━━━━\n\n" +
-
-            "🟢 **Presioná el botón para abrir un ticket.**"
-        )
-        .setFooter({
-            text: "La Orden Morada • Sistema de soporte"
-        })
-        .setTimestamp();
+    const embed =
+        new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(
+                "🎫 SOPORTE — LA ORDEN MORADA"
+            )
+            .setDescription(
+                "¿Necesitás ayuda? 💜\n\n" +
+                "Nuestro equipo está disponible para ayudarte con cualquier problema, duda o consulta relacionada con el servidor.\n\n" +
+                "🎫 **¿Cómo abrir un ticket?**\n" +
+                "Presioná el botón **🎫 Crear ticket** de abajo.\n\n" +
+                "🔒 El ticket será privado y solamente podrán verlo vos y el equipo encargado de atenderlo.\n\n" +
+                "📌 **Antes de abrir un ticket:**\n" +
+                "• Explicá claramente tu problema.\n" +
+                "• No abras tickets innecesarios.\n" +
+                "• Esperá a que un miembro del equipo responda.\n" +
+                "• No hagas spam dentro del ticket.\n\n" +
+                "💜 Nuestro equipo intentará ayudarte lo antes posible."
+            )
+            .setFooter({
+                text: "La Orden Morada • Sistema de soporte"
+            })
+            .setTimestamp();
 
     const boton =
         new ButtonBuilder()
@@ -306,34 +390,27 @@ function crearPanelTickets() {
 }
 
 // =====================================================
-// PANEL DE TICKET
+// MENSAJE DE TICKET
 // =====================================================
 
 function crearMensajeTicket(member) {
 
-    const embed = new EmbedBuilder()
-        .setColor(0x8E44AD)
-        .setTitle("🎫 TICKET DE SOPORTE")
-        .setDescription(
-            `Hola ${member} 💜\n\n` +
-
-            "Tu ticket fue creado correctamente.\n\n" +
-
-            "📌 Explicá detalladamente el motivo de tu consulta " +
-            "para que el equipo pueda ayudarte.\n\n" +
-
-            "🛡️ Un miembro del Staff, Moderación u Owner " +
-            "atenderá tu ticket cuando esté disponible.\n\n" +
-
-            "🚫 No hagas spam ni menciones repetidamente al equipo.\n\n" +
-
-            "Cuando el problema esté solucionado, podés " +
-            "utilizar el botón **🔒 Cerrar ticket**."
-        )
-        .setFooter({
-            text: "La Orden Morada • Soporte"
-        })
-        .setTimestamp();
+    const embed =
+        new EmbedBuilder()
+            .setColor(0x8E44AD)
+            .setTitle("🎫 TICKET DE SOPORTE")
+            .setDescription(
+                `Hola ${member} 💜\n\n` +
+                "Tu ticket fue creado correctamente.\n\n" +
+                "📌 Explicá detalladamente el motivo de tu consulta para que el equipo pueda ayudarte.\n\n" +
+                "🛡️ Un miembro del Staff, Moderación u Owner atenderá tu ticket cuando esté disponible.\n\n" +
+                "🚫 No hagas spam ni menciones repetidamente al equipo.\n\n" +
+                "Cuando el problema esté solucionado, utilizá **🔒 Cerrar ticket**."
+            )
+            .setFooter({
+                text: "La Orden Morada • Soporte"
+            })
+            .setTimestamp();
 
     const cerrar =
         new ButtonBuilder()
@@ -396,11 +473,6 @@ async function asegurarPanelVerificacion() {
                 });
 
             if (existe) {
-
-                console.log(
-                    "✅ Panel de verificación ya existe."
-                );
-
                 continue;
             }
 
@@ -465,11 +537,6 @@ async function asegurarPanelTickets() {
                 });
 
             if (existe) {
-
-                console.log(
-                    "✅ Panel de tickets ya existe."
-                );
-
                 continue;
             }
 
@@ -513,13 +580,8 @@ const commands = [
         .addUserOption(option =>
             option
                 .setName("usuario")
-                .setDescription(
-                    "Usuario que quieres banear"
-                )
+                .setDescription("Usuario que quieres banear")
                 .setRequired(true)
-        )
-        .setDefaultMemberPermissions(
-            PermissionFlagsBits.BanMembers
         ),
 
     // /mute
@@ -531,21 +593,14 @@ const commands = [
         .addUserOption(option =>
             option
                 .setName("usuario")
-                .setDescription(
-                    "Usuario que quieres silenciar"
-                )
+                .setDescription("Usuario que quieres silenciar")
                 .setRequired(true)
         )
         .addStringOption(option =>
             option
                 .setName("duracion")
-                .setDescription(
-                    "Ej: 30s, 5m, 1h, 1d"
-                )
+                .setDescription("Ej: 30s, 5m, 1h, 1d")
                 .setRequired(true)
-        )
-        .setDefaultMemberPermissions(
-            PermissionFlagsBits.ModerateMembers
         ),
 
     // /unmute
@@ -557,13 +612,8 @@ const commands = [
         .addUserOption(option =>
             option
                 .setName("usuario")
-                .setDescription(
-                    "Usuario al que quitar el mute"
-                )
+                .setDescription("Usuario al que quitar el mute")
                 .setRequired(true)
-        )
-        .setDefaultMemberPermissions(
-            PermissionFlagsBits.ModerateMembers
         ),
 
     // /unban
@@ -575,13 +625,68 @@ const commands = [
         .addStringOption(option =>
             option
                 .setName("id")
-                .setDescription(
-                    "ID del usuario"
-                )
+                .setDescription("ID del usuario")
+                .setRequired(true)
+        ),
+
+    // /warn
+    new SlashCommandBuilder()
+        .setName("warn")
+        .setDescription(
+            "Advierte a un usuario."
+        )
+        .addUserOption(option =>
+            option
+                .setName("usuario")
+                .setDescription("Usuario que quieres advertir")
                 .setRequired(true)
         )
-        .setDefaultMemberPermissions(
-            PermissionFlagsBits.BanMembers
+        .addStringOption(option =>
+            option
+                .setName("motivo")
+                .setDescription("Motivo de la advertencia")
+                .setRequired(true)
+        ),
+
+    // /warnings
+    new SlashCommandBuilder()
+        .setName("warnings")
+        .setDescription(
+            "Muestra las advertencias de un usuario."
+        )
+        .addUserOption(option =>
+            option
+                .setName("usuario")
+                .setDescription("Usuario")
+                .setRequired(true)
+        ),
+
+    // /clear
+    new SlashCommandBuilder()
+        .setName("clear")
+        .setDescription(
+            "Elimina mensajes de un canal."
+        )
+        .addIntegerOption(option =>
+            option
+                .setName("cantidad")
+                .setDescription("Cantidad de mensajes a eliminar")
+                .setMinValue(1)
+                .setMaxValue(100)
+                .setRequired(true)
+        ),
+
+    // /slowmode
+    new SlashCommandBuilder()
+        .setName("slowmode")
+        .setDescription(
+            "Configura el modo lento del canal."
+        )
+        .addStringOption(option =>
+            option
+                .setName("tiempo")
+                .setDescription("Ej: 5s, 10s, 1m, 5m o off")
+                .setRequired(true)
         ),
 
     // /lock
@@ -593,16 +698,12 @@ const commands = [
         .addSubcommand(subcommand =>
             subcommand
                 .setName("canal")
-                .setDescription(
-                    "Bloquea solamente este canal."
-                )
+                .setDescription("Bloquea solamente este canal.")
         )
         .addSubcommand(subcommand =>
             subcommand
                 .setName("general")
-                .setDescription(
-                    "Bloquea todos los canales de texto."
-                )
+                .setDescription("Bloquea todos los canales de texto.")
         ),
 
     // /unlock
@@ -614,16 +715,12 @@ const commands = [
         .addSubcommand(subcommand =>
             subcommand
                 .setName("canal")
-                .setDescription(
-                    "Desbloquea solamente este canal."
-                )
+                .setDescription("Desbloquea solamente este canal.")
         )
         .addSubcommand(subcommand =>
             subcommand
                 .setName("general")
-                .setDescription(
-                    "Desbloquea todos los canales de texto."
-                )
+                .setDescription("Desbloquea todos los canales de texto.")
         ),
 
     // /create
@@ -635,15 +732,11 @@ const commands = [
         .addSubcommand(subcommand =>
             subcommand
                 .setName("msj")
-                .setDescription(
-                    "Crea un mensaje en formato embed."
-                )
+                .setDescription("Crea un mensaje en formato embed.")
                 .addStringOption(option =>
                     option
                         .setName("texto")
-                        .setDescription(
-                            "Texto que tendrá el mensaje."
-                        )
+                        .setDescription("Texto que tendrá el mensaje.")
                         .setRequired(true)
                 )
         )
@@ -713,15 +806,10 @@ client.once(
             `🎫 Panel tickets: ${TICKET_PANEL_CHANNEL_ID}`
         );
 
-        console.log(
-            `📂 Categoría tickets: ${TICKET_CATEGORY_ID}`
-        );
-
         setTimeout(
             async () => {
 
                 await asegurarPanelVerificacion();
-
                 await asegurarPanelTickets();
 
             },
@@ -731,12 +819,12 @@ client.once(
 );
 
 // =====================================================
-// MENSAJES CREADOS
+// MENSAJES
 // =====================================================
 
 client.on(
     "messageCreate",
-    message => {
+    async message => {
 
         try {
 
@@ -745,10 +833,122 @@ client.on(
 
             guardarMensaje(message);
 
+            // =============================================
+            // ANTI-SPAM
+            // =============================================
+
+            const miembro =
+                message.member;
+
+            if (!miembro) return;
+
+            if (
+                esOwner({
+                    guild: message.guild,
+                    user: message.author,
+                    member: miembro
+                })
+            ) {
+                return;
+            }
+
+            if (
+                miembro.roles.cache.has(STAFF_ROLE_ID) ||
+                miembro.roles.cache.has(MOD_ROLE_ID) ||
+                miembro.permissions.has(
+                    PermissionFlagsBits.Administrator
+                )
+            ) {
+                return;
+            }
+
+            const ahora =
+                Date.now();
+
+            const datos =
+                spamTracker.get(message.author.id) || [];
+
+            const recientes =
+                datos.filter(
+                    tiempo =>
+                        ahora - tiempo < SPAM_WINDOW
+                );
+
+            recientes.push(ahora);
+
+            spamTracker.set(
+                message.author.id,
+                recientes
+            );
+
+            if (recientes.length >= SPAM_LIMIT) {
+
+                spamTracker.delete(
+                    message.author.id
+                );
+
+                try {
+
+                    await miembro.timeout(
+                        SPAM_TIMEOUT,
+                        "Anti-spam automático"
+                    );
+
+                    const embed =
+                        new EmbedBuilder()
+                            .setColor(0xED4245)
+                            .setTitle(
+                                "🛡️ ANTI-SPAM ACTIVADO"
+                            )
+                            .setDescription(
+                                `${message.author} fue silenciado automáticamente por enviar demasiados mensajes en poco tiempo.`
+                            )
+                            .addFields(
+                                {
+                                    name: "👤 Usuario",
+                                    value:
+                                        `${message.author}`
+                                },
+                                {
+                                    name: "⏱️ Timeout",
+                                    value:
+                                        "5 minutos"
+                                },
+                                {
+                                    name: "📍 Canal",
+                                    value:
+                                        `${message.channel}`
+                                },
+                                {
+                                    name: "🤖 Acción",
+                                    value:
+                                        "Timeout automático"
+                                }
+                            )
+                            .setFooter({
+                                text:
+                                    "La Orden Morada • Anti-Spam"
+                            })
+                            .setTimestamp();
+
+                    await enviarLog(
+                        message.guild,
+                        embed
+                    );
+
+                } catch (error) {
+
+                    console.error(
+                        "❌ ERROR ANTI-SPAM:",
+                        error
+                    );
+                }
+            }
+
         } catch (error) {
 
             console.error(
-                "❌ ERROR GUARDANDO MENSAJE:",
+                "❌ ERROR MESSAGE CREATE:",
                 error
             );
         }
@@ -772,21 +972,16 @@ client.on(
                 messageCache.get(message.id);
 
             const autor =
-                message.author ||
-                null;
+                message.author || null;
 
-            const contenido =
+            let texto =
                 message.content ||
                 guardado?.content ||
                 "Contenido no disponible.";
 
-            let texto = contenido;
-
             if (texto.length > 1000) {
-
                 texto =
-                    texto.substring(0, 997) +
-                    "...";
+                    texto.substring(0, 997) + "...";
             }
 
             const embed =
@@ -880,9 +1075,7 @@ client.on(
                 newMessage.content ||
                 "";
 
-            if (antes === despues) {
-                return;
-            }
+            if (antes === despues) return;
 
             let textoAntes =
                 antes || "Sin contenido";
@@ -891,17 +1084,13 @@ client.on(
                 despues || "Sin contenido";
 
             if (textoAntes.length > 900) {
-
                 textoAntes =
-                    textoAntes.substring(0, 897) +
-                    "...";
+                    textoAntes.substring(0, 897) + "...";
             }
 
             if (textoDespues.length > 900) {
-
                 textoDespues =
-                    textoDespues.substring(0, 897) +
-                    "...";
+                    textoDespues.substring(0, 897) + "...";
             }
 
             const embed =
@@ -953,9 +1142,7 @@ client.on(
                 embed
             );
 
-            guardarMensaje(
-                newMessage
-            );
+            guardarMensaje(newMessage);
 
         } catch (error) {
 
@@ -1240,7 +1427,7 @@ client.on(
 
                     return interaction.editReply({
                         content:
-                            "❌ La categoría de tickets no existe o el ID no corresponde a una categoría."
+                            "❌ La categoría de tickets no existe."
                     });
                 }
 
@@ -1441,11 +1628,10 @@ client.on(
                     });
                 }
 
-                const esTicket =
-                    canal.parentId ===
-                    TICKET_CATEGORY_ID;
-
-                if (!esTicket) {
+                if (
+                    canal.parentId !==
+                    TICKET_CATEGORY_ID
+                ) {
 
                     return interaction.reply({
                         content:
@@ -1454,10 +1640,7 @@ client.on(
                     });
                 }
 
-                const puedeCerrar =
-                    esStaff(interaction);
-
-                if (!puedeCerrar) {
+                if (!esStaff(interaction)) {
 
                     return interaction.reply({
                         content:
@@ -1500,13 +1683,10 @@ client.on(
                     async () => {
 
                         try {
-
                             await canal.delete(
                                 "Ticket cerrado"
                             );
-
                         } catch (error) {
-
                             console.error(
                                 "❌ No se pudo eliminar el ticket:",
                                 error
@@ -1581,7 +1761,6 @@ client.on(
 
             // =================================================
             // /CREATE MSJ
-            // SOLO OWNER
             // =================================================
 
             if (
@@ -1598,26 +1777,10 @@ client.on(
                     });
                 }
 
-                const subcomando =
-                    interaction.options.getSubcommand();
-
-                if (subcomando !== "msj") {
-                    return;
-                }
-
                 const texto =
                     interaction.options.getString(
                         "texto"
                     );
-
-                if (!texto) {
-
-                    return interaction.reply({
-                        content:
-                            "❌ Tenés que escribir un texto.",
-                        ephemeral: true
-                    });
-                }
 
                 if (texto.length > 4096) {
 
@@ -1650,6 +1813,411 @@ client.on(
             }
 
             // =================================================
+            // /WARN
+            // =================================================
+
+            if (
+                interaction.commandName ===
+                "warn"
+            ) {
+
+                if (!esStaff(interaction)) {
+
+                    return interaction.reply({
+                        content:
+                            "❌ No tenés permisos para usar este comando.",
+                        ephemeral: true
+                    });
+                }
+
+                const usuario =
+                    interaction.options.getUser(
+                        "usuario"
+                    );
+
+                const motivo =
+                    interaction.options.getString(
+                        "motivo"
+                    );
+
+                const miembro =
+                    await interaction.guild.members.fetch(
+                        usuario.id
+                    );
+
+                if (
+                    !puedeModerar(
+                        interaction,
+                        miembro
+                    )
+                ) {
+
+                    return interaction.reply({
+                        content:
+                            "❌ No podés moderar a este usuario por la jerarquía de roles.",
+                        ephemeral: true
+                    });
+                }
+
+                const lista =
+                    warnings.get(usuario.id) || [];
+
+                lista.push({
+                    motivo,
+                    moderador:
+                        interaction.user.id,
+                    fecha:
+                        Date.now()
+                });
+
+                warnings.set(
+                    usuario.id,
+                    lista
+                );
+
+                const embed =
+                    new EmbedBuilder()
+                        .setColor(0xF1C40F)
+                        .setTitle(
+                            "⚠️ USUARIO ADVERTIDO"
+                        )
+                        .setDescription(
+                            `${usuario} recibió una advertencia.`
+                        )
+                        .addFields(
+                            {
+                                name: "👤 Usuario",
+                                value:
+                                    `${usuario}`
+                            },
+                            {
+                                name: "📝 Motivo",
+                                value:
+                                    motivo
+                            },
+                            {
+                                name: "🛡️ Moderador",
+                                value:
+                                    `${interaction.user}`
+                            },
+                            {
+                                name: "📊 Advertencias",
+                                value:
+                                    `${lista.length}`
+                            }
+                        )
+                        .setFooter({
+                            text:
+                                "La Orden Morada • Moderación"
+                        })
+                        .setTimestamp();
+
+                await interaction.reply({
+                    embeds: [embed]
+                });
+
+                await enviarLog(
+                    interaction.guild,
+                    embed
+                );
+
+                return;
+            }
+
+            // =================================================
+            // /WARNINGS
+            // =================================================
+
+            if (
+                interaction.commandName ===
+                "warnings"
+            ) {
+
+                if (!esStaff(interaction)) {
+
+                    return interaction.reply({
+                        content:
+                            "❌ No tenés permisos para usar este comando.",
+                        ephemeral: true
+                    });
+                }
+
+                const usuario =
+                    interaction.options.getUser(
+                        "usuario"
+                    );
+
+                const lista =
+                    warnings.get(usuario.id) || [];
+
+                if (lista.length === 0) {
+
+                    return interaction.reply({
+                        content:
+                            `📋 ${usuario} no tiene advertencias.`,
+                        ephemeral: true
+                    });
+                }
+
+                const texto =
+                    lista
+                        .map(
+                            (warn, index) =>
+                                `**${index + 1}.** ${warn.motivo}\n` +
+                                `🛡️ <@${warn.moderador}> • <t:${Math.floor(warn.fecha / 1000)}:R>`
+                        )
+                        .join("\n\n");
+
+                const embed =
+                    new EmbedBuilder()
+                        .setColor(0xF1C40F)
+                        .setTitle(
+                            "📋 HISTORIAL DE ADVERTENCIAS"
+                        )
+                        .setDescription(
+                            `Historial de ${usuario}\n\n${texto}`
+                        )
+                        .setFooter({
+                            text:
+                                `Total: ${lista.length} advertencia(s)`
+                        })
+                        .setTimestamp();
+
+                return interaction.reply({
+                    embeds: [embed],
+                    ephemeral: true
+                });
+            }
+
+            // =================================================
+            // /CLEAR
+            // =================================================
+
+            if (
+                interaction.commandName ===
+                "clear"
+            ) {
+
+                if (!esStaff(interaction)) {
+
+                    return interaction.reply({
+                        content:
+                            "❌ No tenés permisos para usar este comando.",
+                        ephemeral: true
+                    });
+                }
+
+                const cantidad =
+                    interaction.options.getInteger(
+                        "cantidad"
+                    );
+
+                await interaction.deferReply({
+                    ephemeral: true
+                });
+
+                const mensajes =
+                    await interaction.channel.messages.fetch({
+                        limit: cantidad
+                    });
+
+                const eliminados =
+                    await interaction.channel.bulkDelete(
+                        mensajes,
+                        true
+                    );
+
+                const embed =
+                    new EmbedBuilder()
+                        .setColor(0xED4245)
+                        .setTitle(
+                            "🧹 MENSAJES ELIMINADOS"
+                        )
+                        .addFields(
+                            {
+                                name: "📊 Cantidad",
+                                value:
+                                    `${eliminados.size}`
+                            },
+                            {
+                                name: "📍 Canal",
+                                value:
+                                    `${interaction.channel}`
+                            },
+                            {
+                                name: "🛡️ Moderador",
+                                value:
+                                    `${interaction.user}`
+                            }
+                        )
+                        .setFooter({
+                            text:
+                                "La Orden Morada • Moderación"
+                        })
+                        .setTimestamp();
+
+                await interaction.editReply({
+                    embeds: [embed]
+                });
+
+                await enviarLog(
+                    interaction.guild,
+                    embed
+                );
+
+                return;
+            }
+
+            // =================================================
+            // /SLOWMODE
+            // =================================================
+
+            if (
+                interaction.commandName ===
+                "slowmode"
+            ) {
+
+                if (!esStaff(interaction)) {
+
+                    return interaction.reply({
+                        content:
+                            "❌ No tenés permisos para usar este comando.",
+                        ephemeral: true
+                    });
+                }
+
+                const tiempoTexto =
+                    interaction.options.getString(
+                        "tiempo"
+                    );
+
+                if (
+                    tiempoTexto.toLowerCase() ===
+                    "off"
+                ) {
+
+                    await interaction.channel.setRateLimitPerUser(
+                        0,
+                        `Slowmode desactivado por ${interaction.user.tag}`
+                    );
+
+                    const embed =
+                        new EmbedBuilder()
+                            .setColor(0x57F287)
+                            .setTitle(
+                                "🚫 SLOWMODE DESACTIVADO"
+                            )
+                            .addFields(
+                                {
+                                    name: "📍 Canal",
+                                    value:
+                                        `${interaction.channel}`
+                                },
+                                {
+                                    name: "🛡️ Moderador",
+                                    value:
+                                        `${interaction.user}`
+                                }
+                            )
+                            .setTimestamp();
+
+                    await interaction.reply({
+                        embeds: [embed]
+                    });
+
+                    await enviarLog(
+                        interaction.guild,
+                        embed
+                    );
+
+                    return;
+                }
+
+                const segundosTexto =
+                    tiempoTexto.match(
+                        /^(\d+)(s|m)$/i
+                    );
+
+                if (!segundosTexto) {
+
+                    return interaction.reply({
+                        content:
+                            "❌ Usa `5s`, `10s`, `30s`, `1m`, `5m` o `off`.",
+                        ephemeral: true
+                    });
+                }
+
+                const cantidad =
+                    Number(
+                        segundosTexto[1]
+                    );
+
+                const unidad =
+                    segundosTexto[2].toLowerCase();
+
+                let segundos =
+                    cantidad;
+
+                if (unidad === "m") {
+                    segundos =
+                        cantidad * 60;
+                }
+
+                if (
+                    segundos < 0 ||
+                    segundos > 21600
+                ) {
+
+                    return interaction.reply({
+                        content:
+                            "❌ El slowmode debe estar entre 0 y 6 horas.",
+                        ephemeral: true
+                    });
+                }
+
+                await interaction.channel.setRateLimitPerUser(
+                    segundos,
+                    `Slowmode configurado por ${interaction.user.tag}`
+                );
+
+                const embed =
+                    new EmbedBuilder()
+                        .setColor(0xF1C40F)
+                        .setTitle(
+                            "🐢 SLOWMODE ACTIVADO"
+                        )
+                        .addFields(
+                            {
+                                name: "📍 Canal",
+                                value:
+                                    `${interaction.channel}`
+                            },
+                            {
+                                name: "⏱️ Tiempo",
+                                value:
+                                    tiempoTexto
+                            },
+                            {
+                                name: "🛡️ Moderador",
+                                value:
+                                    `${interaction.user}`
+                            }
+                        )
+                        .setTimestamp();
+
+                await interaction.reply({
+                    embeds: [embed]
+                });
+
+                await enviarLog(
+                    interaction.guild,
+                    embed
+                );
+
+                return;
+            }
+
+            // =================================================
             // /BAN
             // =================================================
 
@@ -1657,6 +2225,15 @@ client.on(
                 interaction.commandName ===
                 "ban"
             ) {
+
+                if (!esStaff(interaction)) {
+
+                    return interaction.reply({
+                        content:
+                            "❌ No tenés permisos para usar este comando.",
+                        ephemeral: true
+                    });
+                }
 
                 const usuario =
                     interaction.options.getUser(
@@ -1667,6 +2244,20 @@ client.on(
                     await interaction.guild.members.fetch(
                         usuario.id
                     );
+
+                if (
+                    !puedeModerar(
+                        interaction,
+                        miembro
+                    )
+                ) {
+
+                    return interaction.reply({
+                        content:
+                            "❌ No podés banear a este usuario por la jerarquía de roles.",
+                        ephemeral: true
+                    });
+                }
 
                 await miembro.ban({
                     reason:
@@ -1726,6 +2317,15 @@ client.on(
                 "mute"
             ) {
 
+                if (!esStaff(interaction)) {
+
+                    return interaction.reply({
+                        content:
+                            "❌ No tenés permisos para usar este comando.",
+                        ephemeral: true
+                    });
+                }
+
                 const usuario =
                     interaction.options.getUser(
                         "usuario"
@@ -1741,12 +2341,26 @@ client.on(
                         usuario.id
                     );
 
-                const match =
-                    duracion.match(
-                        /^(\d+)(s|m|h|d)$/i
+                if (
+                    !puedeModerar(
+                        interaction,
+                        miembro
+                    )
+                ) {
+
+                    return interaction.reply({
+                        content:
+                            "❌ No podés silenciar a este usuario por la jerarquía de roles.",
+                        ephemeral: true
+                    });
+                }
+
+                const tiempo =
+                    convertirDuracion(
+                        duracion
                     );
 
-                if (!match) {
+                if (!tiempo) {
 
                     return interaction.reply({
                         content:
@@ -1754,23 +2368,6 @@ client.on(
                         ephemeral: true
                     });
                 }
-
-                const cantidad =
-                    Number(match[1]);
-
-                const unidad =
-                    match[2].toLowerCase();
-
-                const multiplicadores = {
-                    s: 1000,
-                    m: 60 * 1000,
-                    h: 60 * 60 * 1000,
-                    d: 24 * 60 * 60 * 1000
-                };
-
-                const tiempo =
-                    cantidad *
-                    multiplicadores[unidad];
 
                 const maximo =
                     28 *
@@ -1849,6 +2446,15 @@ client.on(
                 "unmute"
             ) {
 
+                if (!esStaff(interaction)) {
+
+                    return interaction.reply({
+                        content:
+                            "❌ No tenés permisos para usar este comando.",
+                        ephemeral: true
+                    });
+                }
+
                 const usuario =
                     interaction.options.getUser(
                         "usuario"
@@ -1858,6 +2464,20 @@ client.on(
                     await interaction.guild.members.fetch(
                         usuario.id
                     );
+
+                if (
+                    !puedeModerar(
+                        interaction,
+                        miembro
+                    )
+                ) {
+
+                    return interaction.reply({
+                        content:
+                            "❌ No podés quitar el mute a este usuario por la jerarquía de roles.",
+                        ephemeral: true
+                    });
+                }
 
                 await miembro.timeout(
                     null,
@@ -1911,6 +2531,15 @@ client.on(
                 interaction.commandName ===
                 "unban"
             ) {
+
+                if (!esStaff(interaction)) {
+
+                    return interaction.reply({
+                        content:
+                            "❌ No tenés permisos para usar este comando.",
+                        ephemeral: true
+                    });
+                }
 
                 const id =
                     interaction.options.getString(
@@ -1982,11 +2611,10 @@ client.on(
                 const subcomando =
                     interaction.options.getSubcommand();
 
-                // ---------------------------------------------
-                // LOCK CANAL
-                // ---------------------------------------------
-
-                if (subcomando === "canal") {
+                if (
+                    subcomando ===
+                    "canal"
+                ) {
 
                     await interaction.deferReply();
 
@@ -2008,6 +2636,10 @@ client.on(
                         interaction.guild.roles.everyone,
                         {
                             SendMessages: false
+                        },
+                        {
+                            reason:
+                                `Lock por ${interaction.user.tag}`
                         }
                     );
 
@@ -2018,18 +2650,12 @@ client.on(
                                 "🔒 CANAL BLOQUEADO"
                             )
                             .setDescription(
-                                "🚫 Los usuarios no pueden enviar mensajes en este canal.\n\n" +
-                                "👁️ El canal continúa siendo visible.\n" +
-                                "🛡️ El Staff autorizado puede continuar moderando."
+                                "🚫 Los usuarios no pueden enviar mensajes en este canal."
                             )
                             .addFields({
                                 name: "🛡️ Bloqueado por",
                                 value:
                                     `${interaction.user}`
-                            })
-                            .setFooter({
-                                text:
-                                    "La Orden Morada • Moderación"
                             })
                             .setTimestamp();
 
@@ -2045,11 +2671,10 @@ client.on(
                     return;
                 }
 
-                // ---------------------------------------------
-                // LOCK GENERAL
-                // ---------------------------------------------
-
-                if (subcomando === "general") {
+                if (
+                    subcomando ===
+                    "general"
+                ) {
 
                     await interaction.deferReply();
 
@@ -2058,7 +2683,15 @@ client.on(
 
                     let bloqueados = 0;
 
-                    for (const [, canal] of canales) {
+                    generalLocks.set(
+                        interaction.guild.id,
+                        new Set()
+                    );
+
+                    for (
+                        const [, canal]
+                        of canales
+                    ) {
 
                         if (
                             !canal ||
@@ -2069,6 +2702,27 @@ client.on(
                         }
 
                         try {
+
+                            const overwrite =
+                                canal.permissionOverwrites.cache.get(
+                                    interaction.guild.roles.everyone.id
+                                );
+
+                            generalLocks
+                                .get(interaction.guild.id)
+                                .add({
+                                    id: canal.id,
+                                    sendMessages:
+                                        overwrite?.allow.has(
+                                            PermissionFlagsBits.SendMessages
+                                        )
+                                            ? true
+                                            : overwrite?.deny.has(
+                                                PermissionFlagsBits.SendMessages
+                                            )
+                                                ? false
+                                                : null
+                                });
 
                             await canal.permissionOverwrites.edit(
                                 interaction.guild.roles.everyone,
@@ -2100,8 +2754,7 @@ client.on(
                             )
                             .setDescription(
                                 "🚨 Se realizó un bloqueo general del servidor.\n\n" +
-                                "🚫 Los usuarios no pueden enviar mensajes en los canales de texto.\n" +
-                                "🛡️ El Staff autorizado puede continuar moderando."
+                                "🚫 Los usuarios no pueden enviar mensajes en los canales de texto."
                             )
                             .addFields(
                                 {
@@ -2115,10 +2768,6 @@ client.on(
                                         `${interaction.user}`
                                 }
                             )
-                            .setFooter({
-                                text:
-                                    "La Orden Morada • Moderación"
-                            })
                             .setTimestamp();
 
                     await interaction.editReply({
@@ -2155,32 +2804,24 @@ client.on(
                 const subcomando =
                     interaction.options.getSubcommand();
 
-                // ---------------------------------------------
-                // UNLOCK CANAL
-                // ---------------------------------------------
-
-                if (subcomando === "canal") {
+                if (
+                    subcomando ===
+                    "canal"
+                ) {
 
                     await interaction.deferReply();
 
                     const canal =
                         interaction.channel;
 
-                    if (
-                        !canal ||
-                        !canal.isTextBased()
-                    ) {
-
-                        return interaction.editReply({
-                            content:
-                                "❌ Este comando no puede utilizarse en este canal."
-                        });
-                    }
-
                     await canal.permissionOverwrites.edit(
                         interaction.guild.roles.everyone,
                         {
                             SendMessages: null
+                        },
+                        {
+                            reason:
+                                `Unlock por ${interaction.user.tag}`
                         }
                     );
 
@@ -2191,16 +2832,12 @@ client.on(
                                 "🔓 CANAL DESBLOQUEADO"
                             )
                             .setDescription(
-                                "🟢 El canal volvió a permitir mensajes."
+                                "🟢 El canal volvió a utilizar sus permisos normales."
                             )
                             .addFields({
                                 name: "🛡️ Desbloqueado por",
                                 value:
                                     `${interaction.user}`
-                            })
-                            .setFooter({
-                                text:
-                                    "La Orden Morada • Moderación"
                             })
                             .setTimestamp();
 
@@ -2216,50 +2853,102 @@ client.on(
                     return;
                 }
 
-                // ---------------------------------------------
-                // UNLOCK GENERAL
-                // ---------------------------------------------
-
-                if (subcomando === "general") {
+                if (
+                    subcomando ===
+                    "general"
+                ) {
 
                     await interaction.deferReply();
 
-                    const canales =
-                        await interaction.guild.channels.fetch();
+                    const guardados =
+                        generalLocks.get(
+                            interaction.guild.id
+                        );
 
                     let desbloqueados = 0;
 
-                    for (const [, canal] of canales) {
+                    if (guardados) {
 
-                        if (
-                            !canal ||
-                            canal.type !==
-                            ChannelType.GuildText
+                        for (
+                            const datos
+                            of guardados
                         ) {
-                            continue;
+
+                            try {
+
+                                const canal =
+                                    await interaction.guild.channels.fetch(
+                                        datos.id
+                                    );
+
+                                if (
+                                    !canal ||
+                                    canal.type !==
+                                    ChannelType.GuildText
+                                ) {
+                                    continue;
+                                }
+
+                                await canal.permissionOverwrites.edit(
+                                    interaction.guild.roles.everyone,
+                                    {
+                                        SendMessages:
+                                            datos.sendMessages === null
+                                                ? null
+                                                : datos.sendMessages
+                                    },
+                                    {
+                                        reason:
+                                            `Unlock general por ${interaction.user.tag}`
+                                    }
+                                );
+
+                                desbloqueados++;
+
+                            } catch (error) {
+
+                                console.error(
+                                    "❌ Error restaurando canal:",
+                                    error
+                                );
+                            }
                         }
 
-                        try {
+                        generalLocks.delete(
+                            interaction.guild.id
+                        );
 
-                            await canal.permissionOverwrites.edit(
-                                interaction.guild.roles.everyone,
-                                {
-                                    SendMessages: null
-                                },
-                                {
-                                    reason:
-                                        `Unlock general por ${interaction.user.tag}`
-                                }
-                            );
+                    } else {
 
-                            desbloqueados++;
+                        const canales =
+                            await interaction.guild.channels.fetch();
 
-                        } catch (error) {
+                        for (
+                            const [, canal]
+                            of canales
+                        ) {
 
-                            console.error(
-                                `❌ No se pudo desbloquear #${canal.name}:`,
-                                error
-                            );
+                            if (
+                                canal?.type !==
+                                ChannelType.GuildText
+                            ) {
+                                continue;
+                            }
+
+                            try {
+
+                                await canal.permissionOverwrites.edit(
+                                    interaction.guild.roles.everyone,
+                                    {
+                                        SendMessages: null
+                                    }
+                                );
+
+                                desbloqueados++;
+
+                            } catch (error) {
+                                console.error(error);
+                            }
                         }
                     }
 
@@ -2270,12 +2959,11 @@ client.on(
                                 "🔓 SERVIDOR DESBLOQUEADO"
                             )
                             .setDescription(
-                                "🟢 Se realizó el desbloqueo general del servidor.\n\n" +
-                                "Los canales de texto volvieron a utilizar sus permisos normales."
+                                "🟢 Se restauraron los permisos de los canales afectados por el bloqueo general."
                             )
                             .addFields(
                                 {
-                                    name: "📊 Canales desbloqueados",
+                                    name: "📊 Canales restaurados",
                                     value:
                                         `${desbloqueados}`
                                 },
@@ -2285,10 +2973,6 @@ client.on(
                                         `${interaction.user}`
                                 }
                             )
-                            .setFooter({
-                                text:
-                                    "La Orden Morada • Moderación"
-                            })
                             .setTimestamp();
 
                     await interaction.editReply({
