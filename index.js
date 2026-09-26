@@ -47,23 +47,26 @@ const TICKET_PANEL_CHANNEL_ID = "1533646002878283936";
 const TICKET_CATEGORY_ID = "1532906564569272401";
 
 // =====================================================
-// RENDER
+// SERVIDOR HTTP
+// Compatible con Wisbyte y otros hostings
 // =====================================================
 
-const PORT = process.env.PORT || 10000;
+const PORT = Number(process.env.PORT) || 10000;
 
-http.createServer((req, res) => {
+const httpServer = http.createServer((req, res) => {
     res.writeHead(200, {
         "Content-Type": "text/plain; charset=utf-8"
     });
 
     res.end("Discord bot online");
-}).listen(PORT, "0.0.0.0", () => {
+});
+
+httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`🌐 Servidor HTTP escuchando en el puerto ${PORT}`);
 });
 
 // =====================================================
-// CLIENTE
+// CLIENTE DISCORD
 // =====================================================
 
 const client = new Client({
@@ -94,7 +97,6 @@ const warnings = new Map();
 
 // =====================================================
 // ANTI-SPAM
-// 5 mensajes en 5 segundos
 // =====================================================
 
 const spamTracker = new Map();
@@ -108,7 +110,6 @@ const SPAM_TIMEOUT = 30 * 1000;
 // =====================================================
 
 function esOwner(interaction) {
-
     if (!interaction.guild) return false;
 
     return (
@@ -118,7 +119,6 @@ function esOwner(interaction) {
 }
 
 function esStaff(interaction) {
-
     if (!interaction.guild) return false;
 
     return (
@@ -136,33 +136,22 @@ function esStaff(interaction) {
 // =====================================================
 
 function puedeModerar(interaction, miembro) {
-
     if (!interaction.guild || !miembro) {
         return false;
     }
 
-    // El Owner real siempre puede moderar
     if (interaction.guild.ownerId === interaction.user.id) {
         return true;
     }
 
-    // Nadie puede moderar al Owner
     if (miembro.id === interaction.guild.ownerId) {
         return false;
     }
 
     const ejecutor = interaction.member;
 
-    // Administrador puede moderar si el objetivo está debajo
-    if (
-        ejecutor.permissions.has(
-            PermissionFlagsBits.Administrator
-        )
-    ) {
-        return (
-            miembro.roles.highest.position <
-            ejecutor.roles.highest.position
-        );
+    if (!ejecutor) {
+        return false;
     }
 
     return (
@@ -176,7 +165,6 @@ function puedeModerar(interaction, miembro) {
 // =====================================================
 
 function guardarMensaje(message) {
-
     if (!message) return;
     if (!message.id) return;
     if (!message.guild) return;
@@ -197,7 +185,6 @@ function guardarMensaje(message) {
     });
 
     if (messageCache.size > 5000) {
-
         const primero =
             messageCache.keys().next().value;
 
@@ -212,9 +199,7 @@ function guardarMensaje(message) {
 // =====================================================
 
 async function enviarLog(guild, embed) {
-
     try {
-
         if (!guild) return;
 
         const canal =
@@ -235,12 +220,42 @@ async function enviarLog(guild, embed) {
         });
 
     } catch (error) {
-
         console.error(
             "❌ ERROR ENVIANDO LOG:",
-            error
+            error.message || error
         );
     }
+}
+
+// =====================================================
+// PARSEAR DURACIÓN
+// =====================================================
+
+function convertirDuracion(entrada) {
+    if (!entrada || typeof entrada !== "string") {
+        return null;
+    }
+
+    const match =
+        entrada.trim().match(
+            /^(\d+)\s*(s|m|h|d)$/i
+        );
+
+    if (!match) {
+        return null;
+    }
+
+    const cantidad = Number(match[1]);
+    const unidad = match[2].toLowerCase();
+
+    const multiplicadores = {
+        s: 1000,
+        m: 60 * 1000,
+        h: 60 * 60 * 1000,
+        d: 24 * 60 * 60 * 1000
+    };
+
+    return cantidad * multiplicadores[unidad];
 }
 
 // =====================================================
@@ -248,25 +263,25 @@ async function enviarLog(guild, embed) {
 // =====================================================
 
 function crearPanelVerificacion() {
-
-    const embed = new EmbedBuilder()
-        .setColor(0x8E44AD)
-        .setTitle("🛡️ VERIFICACIÓN — LA ORDEN MORADA")
-        .setDescription(
-            "¡Bienvenido/a a **La Orden Morada**! 💜\n\n" +
-            "Para acceder al servidor, primero tenés que verificarte.\n\n" +
-            "Al presionar **✅ Verificar**, aceptás respetar " +
-            "las reglas y normas de la comunidad.\n\n" +
-            "🔐 Una vez verificado/a, recibirás automáticamente " +
-            "el rol correspondiente.\n\n" +
-            "💜 ¡Gracias por formar parte de **La Orden Morada**!\n\n" +
-            "━━━━━━━━━━━━━━━━━━━━\n\n" +
-            "🟢 **Presioná el botón de abajo para verificarte.**"
-        )
-        .setFooter({
-            text: "La Orden Morada • Verificación"
-        })
-        .setTimestamp();
+    const embed =
+        new EmbedBuilder()
+            .setColor(0x8E44AD)
+            .setTitle("🛡️ VERIFICACIÓN — LA ORDEN MORADA")
+            .setDescription(
+                "¡Bienvenido/a a **La Orden Morada**! 💜\n\n" +
+                "Para acceder al servidor, primero tenés que verificarte.\n\n" +
+                "Al presionar **✅ Verificar**, aceptás respetar " +
+                "las reglas y normas de la comunidad.\n\n" +
+                "🔐 Una vez verificado/a, recibirás automáticamente " +
+                "el rol correspondiente.\n\n" +
+                "💜 ¡Gracias por formar parte de **La Orden Morada**!\n\n" +
+                "━━━━━━━━━━━━━━━━━━━━\n\n" +
+                "🟢 **Presioná el botón de abajo para verificarte.**"
+            )
+            .setFooter({
+                text: "La Orden Morada • Verificación"
+            })
+            .setTimestamp();
 
     const boton =
         new ButtonBuilder()
@@ -290,28 +305,28 @@ function crearPanelVerificacion() {
 // =====================================================
 
 function crearPanelTickets() {
-
-    const embed = new EmbedBuilder()
-        .setColor(0x5865F2)
-        .setTitle("🎫 SOPORTE — LA ORDEN MORADA")
-        .setDescription(
-            "¿Necesitás ayuda? 💜\n\n" +
-            "Nuestro equipo está disponible para ayudarte.\n\n" +
-            "🎫 **¿Cómo abrir un ticket?**\n" +
-            "Presioná el botón **🎫 Crear ticket**.\n\n" +
-            "🔒 El ticket será privado.\n\n" +
-            "📌 **Antes de abrir un ticket:**\n" +
-            "• Explicá claramente tu problema.\n" +
-            "• No abras tickets innecesarios.\n" +
-            "• Esperá al equipo.\n" +
-            "• No hagas spam.\n\n" +
-            "━━━━━━━━━━━━━━━━━━━━\n\n" +
-            "🟢 **Presioná el botón para abrir un ticket.**"
-        )
-        .setFooter({
-            text: "La Orden Morada • Sistema de soporte"
-        })
-        .setTimestamp();
+    const embed =
+        new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle("🎫 SOPORTE — LA ORDEN MORADA")
+            .setDescription(
+                "¿Necesitás ayuda? 💜\n\n" +
+                "Nuestro equipo está disponible para ayudarte.\n\n" +
+                "🎫 **¿Cómo abrir un ticket?**\n" +
+                "Presioná el botón **🎫 Crear ticket**.\n\n" +
+                "🔒 El ticket será privado.\n\n" +
+                "📌 **Antes de abrir un ticket:**\n" +
+                "• Explicá claramente tu problema.\n" +
+                "• No abras tickets innecesarios.\n" +
+                "• Esperá al equipo.\n" +
+                "• No hagas spam.\n\n" +
+                "━━━━━━━━━━━━━━━━━━━━\n\n" +
+                "🟢 **Presioná el botón para abrir un ticket.**"
+            )
+            .setFooter({
+                text: "La Orden Morada • Sistema de soporte"
+            })
+            .setTimestamp();
 
     const boton =
         new ButtonBuilder()
@@ -335,24 +350,24 @@ function crearPanelTickets() {
 // =====================================================
 
 function crearMensajeTicket(member) {
-
-    const embed = new EmbedBuilder()
-        .setColor(0x8E44AD)
-        .setTitle("🎫 TICKET DE SOPORTE")
-        .setDescription(
-            `Hola ${member} 💜\n\n` +
-            "Tu ticket fue creado correctamente.\n\n" +
-            "📌 Explicá detalladamente el motivo de tu consulta.\n\n" +
-            "🛡️ Un miembro del Staff, Moderación u Owner " +
-            "atenderá tu ticket.\n\n" +
-            "🚫 No hagas spam ni menciones repetidamente al equipo.\n\n" +
-            "Cuando el problema esté solucionado, podés " +
-            "utilizar **🔒 Cerrar ticket**."
-        )
-        .setFooter({
-            text: "La Orden Morada • Soporte"
-        })
-        .setTimestamp();
+    const embed =
+        new EmbedBuilder()
+            .setColor(0x8E44AD)
+            .setTitle("🎫 TICKET DE SOPORTE")
+            .setDescription(
+                `Hola ${member} 💜\n\n` +
+                "Tu ticket fue creado correctamente.\n\n" +
+                "📌 Explicá detalladamente el motivo de tu consulta.\n\n" +
+                "🛡️ Un miembro del Staff, Moderación u Owner " +
+                "atenderá tu ticket.\n\n" +
+                "🚫 No hagas spam ni menciones repetidamente al equipo.\n\n" +
+                "Cuando el problema esté solucionado, podés " +
+                "utilizar **🔒 Cerrar ticket**."
+            )
+            .setFooter({
+                text: "La Orden Morada • Soporte"
+            })
+            .setTimestamp();
 
     const cerrar =
         new ButtonBuilder()
@@ -377,11 +392,8 @@ function crearMensajeTicket(member) {
 // =====================================================
 
 async function asegurarPanelVerificacion() {
-
     try {
-
         for (const [, guild] of client.guilds.cache) {
-
             const canal =
                 await guild.channels.fetch(
                     VERIFY_CHANNEL_ID
@@ -398,7 +410,6 @@ async function asegurarPanelVerificacion() {
 
             const existe =
                 mensajes.find(message => {
-
                     if (
                         message.author?.id !==
                         client.user.id
@@ -415,22 +426,19 @@ async function asegurarPanelVerificacion() {
                 });
 
             if (!existe) {
-
                 await canal.send(
                     crearPanelVerificacion()
                 );
 
                 console.log(
-                    "✅ Panel de verificación enviado."
+                    `✅ Panel de verificación enviado en ${guild.name}.`
                 );
             }
         }
-
     } catch (error) {
-
         console.error(
             "❌ ERROR PANEL VERIFICACIÓN:",
-            error
+            error.message || error
         );
     }
 }
@@ -440,11 +448,8 @@ async function asegurarPanelVerificacion() {
 // =====================================================
 
 async function asegurarPanelTickets() {
-
     try {
-
         for (const [, guild] of client.guilds.cache) {
-
             const canal =
                 await guild.channels.fetch(
                     TICKET_PANEL_CHANNEL_ID
@@ -461,7 +466,6 @@ async function asegurarPanelTickets() {
 
             const existe =
                 mensajes.find(message => {
-
                     if (
                         message.author?.id !==
                         client.user.id
@@ -478,22 +482,19 @@ async function asegurarPanelTickets() {
                 });
 
             if (!existe) {
-
                 await canal.send(
                     crearPanelTickets()
                 );
 
                 console.log(
-                    "✅ Panel de tickets enviado."
+                    `✅ Panel de tickets enviado en ${guild.name}.`
                 );
             }
         }
-
     } catch (error) {
-
         console.error(
             "❌ ERROR PANEL TICKETS:",
-            error
+            error.message || error
         );
     }
 }
@@ -504,14 +505,12 @@ async function asegurarPanelTickets() {
 
 const commands = [
 
-    // /ip
     new SlashCommandBuilder()
         .setName("ip")
         .setDescription(
             "Muestra la IP del servidor de Minecraft."
         ),
 
-    // /ban
     new SlashCommandBuilder()
         .setName("ban")
         .setDescription("Banea a un usuario.")
@@ -525,7 +524,6 @@ const commands = [
             PermissionFlagsBits.BanMembers
         ),
 
-    // /mute
     new SlashCommandBuilder()
         .setName("mute")
         .setDescription("Silencia temporalmente a un usuario.")
@@ -545,7 +543,6 @@ const commands = [
             PermissionFlagsBits.ModerateMembers
         ),
 
-    // /unmute
     new SlashCommandBuilder()
         .setName("unmute")
         .setDescription("Quita el mute a un usuario.")
@@ -559,7 +556,6 @@ const commands = [
             PermissionFlagsBits.ModerateMembers
         ),
 
-    // /unban
     new SlashCommandBuilder()
         .setName("unban")
         .setDescription("Desbanea a un usuario.")
@@ -573,7 +569,6 @@ const commands = [
             PermissionFlagsBits.BanMembers
         ),
 
-    // /warn
     new SlashCommandBuilder()
         .setName("warn")
         .setDescription("Advierte a un usuario.")
@@ -590,10 +585,11 @@ const commands = [
                 .setRequired(true)
         ),
 
-    // /warnings
     new SlashCommandBuilder()
         .setName("warnings")
-        .setDescription("Muestra las advertencias de un usuario.")
+        .setDescription(
+            "Muestra las advertencias de un usuario."
+        )
         .addUserOption(option =>
             option
                 .setName("usuario")
@@ -601,7 +597,6 @@ const commands = [
                 .setRequired(true)
         ),
 
-    // /clear
     new SlashCommandBuilder()
         .setName("clear")
         .setDescription("Elimina mensajes de un canal.")
@@ -614,7 +609,6 @@ const commands = [
                 .setRequired(true)
         ),
 
-    // /slowmode
     new SlashCommandBuilder()
         .setName("slowmode")
         .setDescription("Configura el modo lento.")
@@ -625,7 +619,6 @@ const commands = [
                 .setRequired(true)
         ),
 
-    // /lock
     new SlashCommandBuilder()
         .setName("lock")
         .setDescription("Bloquea un canal o todo el servidor.")
@@ -640,7 +633,6 @@ const commands = [
                 .setDescription("Bloquea todos los canales.")
         ),
 
-    // /unlock
     new SlashCommandBuilder()
         .setName("unlock")
         .setDescription("Desbloquea un canal o todo el servidor.")
@@ -655,7 +647,6 @@ const commands = [
                 .setDescription("Desbloquea todos los canales.")
         ),
 
-    // /create
     new SlashCommandBuilder()
         .setName("create")
         .setDescription("Crea un mensaje personalizado.")
@@ -683,10 +674,13 @@ const rest =
     }).setToken(TOKEN);
 
 async function registrarComandos() {
-
     try {
+        console.log("🔄 Registrando comandos slash...");
 
-        console.log("Registrando comandos...");
+        /*
+         * Se registran GLOBALMENTE.
+         * Discord puede tardar en actualizar comandos globales.
+         */
 
         await rest.put(
             Routes.applicationCommands(CLIENT_ID),
@@ -696,14 +690,13 @@ async function registrarComandos() {
         );
 
         console.log(
-            "✅ Comandos registrados correctamente."
+            `✅ ${commands.length} comandos registrados correctamente.`
         );
 
     } catch (error) {
-
         console.error(
-            "❌ Error registrando comandos:",
-            error
+            "❌ ERROR REGISTRANDO COMANDOS:",
+            error.message || error
         );
     }
 }
@@ -717,7 +710,19 @@ client.once(
     async () => {
 
         console.log(
-            `✅ Bot conectado como ${client.user.tag}`
+            "=========================================="
+        );
+
+        console.log(
+            `✅ BOT CONECTADO: ${client.user.tag}`
+        );
+
+        console.log(
+            `🆔 CLIENT ID: ${client.user.id}`
+        );
+
+        console.log(
+            `🏠 SERVIDORES: ${client.guilds.cache.size}`
         );
 
         console.log(
@@ -725,15 +730,25 @@ client.once(
         );
 
         console.log(
-            "🔗 Bloqueo de invitaciones Discord: ACTIVADO"
+            "🔗 Bloqueo de invitaciones: ACTIVADO"
+        );
+
+        console.log(
+            "🎫 Sistema de tickets: ACTIVADO"
+        );
+
+        console.log(
+            "🛡️ Sistema de verificación: ACTIVADO"
+        );
+
+        console.log(
+            "=========================================="
         );
 
         setTimeout(
             async () => {
-
                 await asegurarPanelVerificacion();
                 await asegurarPanelTickets();
-
             },
             2000
         );
@@ -755,10 +770,6 @@ client.on(
 
             guardarMensaje(message);
 
-            // =================================================
-            // EXCLUIR STAFF DEL ANTI-SPAM
-            // =================================================
-
             const miembro =
                 message.member;
 
@@ -774,12 +785,12 @@ client.on(
                 );
 
             // =================================================
-            // BLOQUEO DE INVITACIONES DISCORD
+            // INVITACIONES DISCORD
             // =================================================
 
             const invitacionDiscord =
                 /(discord\.gg\/|discord\.com\/invite\/|discordapp\.com\/invite\/)/i
-                    .test(message.content);
+                    .test(message.content || "");
 
             if (
                 invitacionDiscord &&
@@ -787,9 +798,7 @@ client.on(
             ) {
 
                 try {
-
                     await message.delete();
-
                 } catch {}
 
                 const aviso =
@@ -800,11 +809,9 @@ client.on(
 
                 setTimeout(
                     async () => {
-
                         try {
                             await aviso.delete();
                         } catch {}
-
                     },
                     5000
                 );
@@ -890,7 +897,6 @@ client.on(
 
                 try {
 
-                    // Eliminar mensajes recientes
                     const mensajes =
                         await message.channel.messages.fetch({
                             limit: 20
@@ -916,7 +922,7 @@ client.on(
 
                     console.error(
                         "❌ No se pudieron eliminar mensajes de spam:",
-                        error
+                        error.message || error
                     );
                 }
 
@@ -931,7 +937,7 @@ client.on(
 
                     console.error(
                         "❌ No se pudo aplicar timeout anti-spam:",
-                        error
+                        error.message || error
                     );
                 }
 
@@ -985,22 +991,16 @@ client.on(
 
                 setTimeout(
                     async () => {
-
                         try {
                             await aviso.delete();
                         } catch {}
-
                     },
                     5000
                 );
 
                 setTimeout(
                     () => {
-
-                        spamTracker.delete(
-                            clave
-                        );
-
+                        spamTracker.delete(clave);
                     },
                     SPAM_WINDOW
                 );
@@ -1010,7 +1010,7 @@ client.on(
 
             console.error(
                 "❌ ERROR MESSAGE CREATE:",
-                error
+                error.message || error
             );
         }
     }
@@ -1042,6 +1042,16 @@ client.on(
                     texto.substring(0, 997) + "...";
             }
 
+            const autor =
+                message.author ||
+                (
+                    guardado?.authorId
+                        ? await client.users.fetch(
+                            guardado.authorId
+                        ).catch(() => null)
+                        : null
+                );
+
             const embed =
                 new EmbedBuilder()
                     .setColor(0xED4245)
@@ -1050,8 +1060,8 @@ client.on(
                         {
                             name: "👤 Usuario",
                             value:
-                                message.author
-                                    ? `${message.author} \`${message.author.tag}\``
+                                autor
+                                    ? `${autor} \`${autor.tag}\``
                                     : "Desconocido"
                         },
                         {
@@ -1069,10 +1079,9 @@ client.on(
                     )
                     .setTimestamp();
 
-            if (message.author) {
-
+            if (autor) {
                 embed.setThumbnail(
-                    message.author.displayAvatarURL({
+                    autor.displayAvatarURL({
                         extension: "png",
                         size: 256
                     })
@@ -1092,7 +1101,7 @@ client.on(
 
             console.error(
                 "❌ ERROR MESSAGE DELETE:",
-                error
+                error.message || error
             );
         }
     }
@@ -1194,7 +1203,7 @@ client.on(
 
             console.error(
                 "❌ ERROR MESSAGE UPDATE:",
-                error
+                error.message || error
             );
         }
     }
@@ -1228,7 +1237,9 @@ client.on(
             const embed =
                 new EmbedBuilder()
                     .setColor(0x8E44AD)
-                    .setTitle("🫶︱𝗕𝗜𝗘𝗡𝗩𝗘𝗡𝗜𝗗𝗢𝗦")
+                    .setTitle(
+                        "🫶︱𝗕𝗜𝗘𝗡𝗩𝗘𝗡𝗜𝗗𝗢𝗦"
+                    )
                     .setDescription(
                         `💜 **¡Bienvenido/a ${member} a La Orden Morada!**\n\n` +
                         "🫶 Esperamos que disfrutes del servidor."
@@ -1250,7 +1261,7 @@ client.on(
 
             console.error(
                 "❌ ERROR BIENVENIDA:",
-                error
+                error.message || error
             );
         }
     }
@@ -1317,7 +1328,7 @@ client.on(
 
                     return interaction.reply({
                         content:
-                            "❌ El rol de verificado debe estar debajo del rol del bot.",
+                            "❌ El rol de verificado debe estar debajo del rol más alto del bot.",
                         ephemeral: true
                     });
                 }
@@ -1419,7 +1430,8 @@ client.on(
                 const canal =
                     await guild.channels.create({
 
-                        name: nombre,
+                        name:
+                            nombre || `ticket-${interaction.user.id}`,
 
                         type:
                             ChannelType.GuildText,
@@ -1605,13 +1617,16 @@ client.on(
 
                 setTimeout(
                     async () => {
-
                         try {
                             await canal.delete(
                                 "Ticket cerrado"
                             );
-                        } catch {}
-
+                        } catch (error) {
+                            console.error(
+                                "❌ No se pudo eliminar el ticket:",
+                                error.message || error
+                            );
+                        }
                     },
                     3000
                 );
@@ -1620,7 +1635,7 @@ client.on(
             }
 
             // =================================================
-            // SOLO COMANDOS DESDE ACÁ
+            // SOLO SLASH COMMANDS
             // =================================================
 
             if (!interaction.isChatInputCommand()) {
@@ -1691,6 +1706,15 @@ client.on(
                         "texto"
                     );
 
+                if (!texto) {
+
+                    return interaction.reply({
+                        content:
+                            "❌ Tenés que escribir un texto.",
+                        ephemeral: true
+                    });
+                }
+
                 if (texto.length > 4096) {
 
                     return interaction.reply({
@@ -1725,19 +1749,21 @@ client.on(
             // COMPROBAR STAFF
             // =================================================
 
+            const comandosStaff = [
+                "ban",
+                "mute",
+                "unmute",
+                "unban",
+                "warn",
+                "warnings",
+                "clear",
+                "slowmode",
+                "lock",
+                "unlock"
+            ];
+
             if (
-                [
-                    "ban",
-                    "mute",
-                    "unmute",
-                    "unban",
-                    "warn",
-                    "warnings",
-                    "clear",
-                    "slowmode",
-                    "lock",
-                    "unlock"
-                ].includes(
+                comandosStaff.includes(
                     interaction.commandName
                 )
             ) {
@@ -1990,39 +2016,26 @@ client.on(
                         "tiempo"
                     );
 
-                const match =
-                    entrada.match(
-                        /^(\d+)(s|m|h)$/i
-                    );
+                const segundos =
+                    convertirDuracion(entrada);
 
-                if (!match) {
+                if (segundos === null) {
 
                     return interaction.reply({
                         content:
-                            "❌ Usa `5s`, `10s`, `1m` o `1h`.",
+                            "❌ Usa `5s`, `10s`, `1m`, `5m` o `1h`.",
                         ephemeral: true
                     });
                 }
 
-                const cantidad =
-                    Number(match[1]);
-
-                const unidad =
-                    match[2].toLowerCase();
-
-                const multiplicadores = {
-                    s: 1,
-                    m: 60,
-                    h: 3600
-                };
-
-                const segundos =
-                    cantidad *
-                    multiplicadores[unidad];
+                const segundosFinal =
+                    Math.floor(
+                        segundos / 1000
+                    );
 
                 if (
-                    segundos < 0 ||
-                    segundos > 21600
+                    segundosFinal < 0 ||
+                    segundosFinal > 21600
                 ) {
 
                     return interaction.reply({
@@ -2032,17 +2045,30 @@ client.on(
                     });
                 }
 
+                if (
+                    !interaction.channel ||
+                    typeof interaction.channel.setRateLimitPerUser !==
+                    "function"
+                ) {
+
+                    return interaction.reply({
+                        content:
+                            "❌ Este canal no permite configurar slowmode.",
+                        ephemeral: true
+                    });
+                }
+
                 await interaction.channel.setRateLimitPerUser(
-                    segundos,
+                    segundosFinal,
                     `Slowmode por ${interaction.user.tag}`
                 );
 
                 const embed =
                     new EmbedBuilder()
                         .setColor(0x5865F2)
-                        .setTitle("🐢 SLOWMODE ACTIVADO")
+                        .setTitle("🐢 SLOWMODE CONFIGURADO")
                         .setDescription(
-                            `El slowmode de este canal ahora es de **${segundos} segundos**.`
+                            `El slowmode de este canal ahora es de **${segundosFinal} segundos**.`
                         )
                         .addFields({
                             name: "🛡️ Configurado por",
@@ -2179,12 +2205,12 @@ client.on(
                     });
                 }
 
-                const match =
-                    duracion.match(
-                        /^(\d+)(s|m|h|d)$/i
-                    );
+                const tiempo =
+                    convertirDuracion(duracion);
 
-                if (!match) {
+                if (
+                    tiempo === null
+                ) {
 
                     return interaction.reply({
                         content:
@@ -2192,23 +2218,6 @@ client.on(
                         ephemeral: true
                     });
                 }
-
-                const cantidad =
-                    Number(match[1]);
-
-                const unidad =
-                    match[2].toLowerCase();
-
-                const multiplicadores = {
-                    s: 1000,
-                    m: 60 * 1000,
-                    h: 60 * 60 * 1000,
-                    d: 24 * 60 * 60 * 1000
-                };
-
-                const tiempo =
-                    cantidad *
-                    multiplicadores[unidad];
 
                 const maximo =
                     28 *
@@ -2359,7 +2368,16 @@ client.on(
                 const id =
                     interaction.options.getString(
                         "id"
-                    );
+                    ).trim();
+
+                if (!/^\d{17,20}$/.test(id)) {
+
+                    return interaction.reply({
+                        content:
+                            "❌ La ID de Discord no es válida.",
+                        ephemeral: true
+                    });
+                }
 
                 await interaction.guild.members.unban(
                     id,
@@ -2423,10 +2441,25 @@ client.on(
                     const canal =
                         interaction.channel;
 
+                    if (
+                        !canal ||
+                        !canal.permissionOverwrites
+                    ) {
+
+                        return interaction.editReply({
+                            content:
+                                "❌ Este canal no puede bloquearse."
+                        });
+                    }
+
                     await canal.permissionOverwrites.edit(
                         interaction.guild.roles.everyone,
                         {
                             SendMessages: false
+                        },
+                        {
+                            reason:
+                                `Lock por ${interaction.user.tag}`
                         }
                     );
 
@@ -2475,8 +2508,10 @@ client.on(
 
                         if (
                             !canal ||
-                            canal.type !==
-                            ChannelType.GuildText
+                            ![
+                                ChannelType.GuildText,
+                                ChannelType.GuildAnnouncement
+                            ].includes(canal.type)
                         ) {
                             continue;
                         }
@@ -2496,7 +2531,13 @@ client.on(
 
                             bloqueados++;
 
-                        } catch {}
+                        } catch (error) {
+
+                            console.error(
+                                `❌ No se pudo bloquear #${canal.name}:`,
+                                error.message || error
+                            );
+                        }
                     }
 
                     const embed =
@@ -2557,10 +2598,25 @@ client.on(
                     const canal =
                         interaction.channel;
 
+                    if (
+                        !canal ||
+                        !canal.permissionOverwrites
+                    ) {
+
+                        return interaction.editReply({
+                            content:
+                                "❌ Este canal no puede desbloquearse."
+                        });
+                    }
+
                     await canal.permissionOverwrites.edit(
                         interaction.guild.roles.everyone,
                         {
                             SendMessages: null
+                        },
+                        {
+                            reason:
+                                `Unlock por ${interaction.user.tag}`
                         }
                     );
 
@@ -2609,8 +2665,10 @@ client.on(
 
                         if (
                             !canal ||
-                            canal.type !==
-                            ChannelType.GuildText
+                            ![
+                                ChannelType.GuildText,
+                                ChannelType.GuildAnnouncement
+                            ].includes(canal.type)
                         ) {
                             continue;
                         }
@@ -2630,7 +2688,13 @@ client.on(
 
                             desbloqueados++;
 
-                        } catch {}
+                        } catch (error) {
+
+                            console.error(
+                                `❌ No se pudo desbloquear #${canal.name}:`,
+                                error.message || error
+                            );
+                        }
                     }
 
                     const embed =
@@ -2703,18 +2767,97 @@ client.on(
 );
 
 // =====================================================
-// INICIO
+// ERRORES DEL CLIENTE
+// =====================================================
+
+client.on(
+    "error",
+    error => {
+        console.error(
+            "❌ ERROR DEL CLIENTE DISCORD:",
+            error
+        );
+    }
+);
+
+client.on(
+    "warn",
+    warning => {
+        console.warn(
+            "⚠️ DISCORD:",
+            warning
+        );
+    }
+);
+
+// =====================================================
+// PROCESO
+// =====================================================
+
+process.on(
+    "unhandledRejection",
+    error => {
+        console.error(
+            "❌ UNHANDLED REJECTION:",
+            error
+        );
+    }
+);
+
+process.on(
+    "uncaughtException",
+    error => {
+        console.error(
+            "❌ UNCAUGHT EXCEPTION:",
+            error
+        );
+    }
+);
+
+// =====================================================
+// COMPROBAR TOKEN
 // =====================================================
 
 if (!TOKEN) {
 
     console.error(
-        "❌ Falta DISCORD_TOKEN en Render."
+        "❌ ERROR: No existe la variable DISCORD_TOKEN."
+    );
+
+    console.error(
+        "👉 En Wisbyte tenés que crear una variable de entorno llamada DISCORD_TOKEN con el token de tu bot."
     );
 
     process.exit(1);
 }
 
-registrarComandos();
+// =====================================================
+// INICIO
+// =====================================================
 
-client.login(TOKEN);
+(async () => {
+
+    try {
+
+        await registrarComandos();
+
+        console.log(
+            "🔐 Iniciando sesión en Discord..."
+        );
+
+        await client.login(TOKEN);
+
+    } catch (error) {
+
+        console.error(
+            "❌ NO SE PUDO INICIAR EL BOT:"
+        );
+
+        console.error(
+            error
+        );
+
+        process.exit(1);
+    }
+
+})();
