@@ -22,6 +22,11 @@ const http = require("http");
 const CLIENT_ID = "1552817688378605650";
 const TOKEN = process.env.DISCORD_TOKEN;
 
+// Si querés usar comandos solamente en tu servidor durante
+// las pruebas, poné acá el ID de tu servidor.
+// Si lo dejás vacío, los comandos serán globales.
+const GUILD_ID = process.env.GUILD_ID || "";
+
 // ROLES
 const OWNER_ROLE_ID = "1531489394127536188";
 const STAFF_ROLE_ID = "1532574929235607632";
@@ -560,18 +565,37 @@ async function registrarComandos() {
             "Registrando comandos..."
         );
 
-        await rest.put(
-            Routes.applicationCommands(
-                CLIENT_ID
-            ),
-            {
-                body: commands
-            }
-        );
+        if (GUILD_ID) {
 
-        console.log(
-            "✅ Comandos registrados correctamente."
-        );
+            await rest.put(
+                Routes.applicationGuildCommands(
+                    CLIENT_ID,
+                    GUILD_ID
+                ),
+                {
+                    body: commands
+                }
+            );
+
+            console.log(
+                "✅ Comandos registrados en el servidor."
+            );
+
+        } else {
+
+            await rest.put(
+                Routes.applicationCommands(
+                    CLIENT_ID
+                ),
+                {
+                    body: commands
+                }
+            );
+
+            console.log(
+                "✅ Comandos globales registrados correctamente."
+            );
+        }
 
     } catch (error) {
 
@@ -975,6 +999,13 @@ client.on(
 client.on(
     "interactionCreate",
     async interaction => {
+
+        console.log(
+            "🔔 INTERACCIÓN:",
+            interaction.isChatInputCommand()
+                ? `/${interaction.commandName}`
+                : interaction.customId
+        );
 
         // =================================================
         // VERIFICACIÓN
@@ -1496,6 +1527,8 @@ client.on(
                 "ban"
             ) {
 
+                await interaction.deferReply();
+
                 const usuario =
                     interaction.options.getUser(
                         "usuario"
@@ -1511,12 +1544,47 @@ client.on(
                         `Ban aplicado por ${interaction.user.tag}`
                 });
 
-                await interaction.reply({
-                    content:
-                        `🔨 ${usuario} fue baneado correctamente.`
+                const embed =
+                    new EmbedBuilder()
+                        .setColor(0xED4245)
+                        .setTitle("🔨 USUARIO BANEADO")
+                        .setDescription(
+                            `${usuario} fue baneado correctamente.`
+                        )
+                        .addFields(
+                            {
+                                name: "👤 Usuario",
+                                value:
+                                    `${usuario}`
+                            },
+                            {
+                                name: "🆔 ID",
+                                value:
+                                    usuario.id
+                            },
+                            {
+                                name: "🛡️ Moderador",
+                                value:
+                                    `${interaction.user}`
+                            }
+                        )
+                        .setThumbnail(
+                            usuario.displayAvatarURL({
+                                extension: "png",
+                                size: 256
+                            })
+                        )
+                        .setFooter({
+                            text:
+                                "La Orden Morada • Moderación"
+                        })
+                        .setTimestamp();
+
+                await interaction.editReply({
+                    embeds: [embed]
                 });
 
-                const embed =
+                const logEmbed =
                     new EmbedBuilder()
                         .setColor(0xED4245)
                         .setTitle(
@@ -1543,7 +1611,7 @@ client.on(
 
                 await enviarLog(
                     interaction.guild,
-                    embed
+                    logEmbed
                 );
 
                 return;
@@ -1558,6 +1626,8 @@ client.on(
                 "mute"
             ) {
 
+                await interaction.deferReply();
+
                 const usuario =
                     interaction.options.getUser(
                         "usuario"
@@ -1568,11 +1638,6 @@ client.on(
                         "duracion"
                     );
 
-                const miembro =
-                    await interaction.guild.members.fetch(
-                        usuario.id
-                    );
-
                 const match =
                     duracion.match(
                         /^(\d+)(s|m|h|d)$/i
@@ -1580,10 +1645,9 @@ client.on(
 
                 if (!match) {
 
-                    return interaction.reply({
+                    return interaction.editReply({
                         content:
-                            "❌ Usa `30s`, `5m`, `1h` o `1d`.",
-                        ephemeral: true
+                            "❌ Usa `30s`, `5m`, `1h` o `1d`."
                     });
                 }
 
@@ -1613,24 +1677,65 @@ client.on(
 
                 if (tiempo > maximo) {
 
-                    return interaction.reply({
+                    return interaction.editReply({
                         content:
-                            "❌ El máximo es de 28 días.",
-                        ephemeral: true
+                            "❌ El máximo es de 28 días."
                     });
                 }
+
+                const miembro =
+                    await interaction.guild.members.fetch(
+                        usuario.id
+                    );
 
                 await miembro.timeout(
                     tiempo,
                     `Mute aplicado por ${interaction.user.tag}`
                 );
 
-                await interaction.reply({
-                    content:
-                        `🔇 ${usuario} fue silenciado durante ${duracion}.`
+                const embed =
+                    new EmbedBuilder()
+                        .setColor(0x5865F2)
+                        .setTitle(
+                            "🔇 USUARIO SILENCIADO"
+                        )
+                        .setDescription(
+                            `${usuario} fue silenciado correctamente.`
+                        )
+                        .addFields(
+                            {
+                                name: "👤 Usuario",
+                                value:
+                                    `${usuario}`
+                            },
+                            {
+                                name: "⏱️ Duración",
+                                value:
+                                    duracion
+                            },
+                            {
+                                name: "🛡️ Moderador",
+                                value:
+                                    `${interaction.user}`
+                            }
+                        )
+                        .setThumbnail(
+                            usuario.displayAvatarURL({
+                                extension: "png",
+                                size: 256
+                            })
+                        )
+                        .setFooter({
+                            text:
+                                "La Orden Morada • Moderación"
+                        })
+                        .setTimestamp();
+
+                await interaction.editReply({
+                    embeds: [embed]
                 });
 
-                const embed =
+                const logEmbed =
                     new EmbedBuilder()
                         .setColor(0x5865F2)
                         .setTitle(
@@ -1657,7 +1762,7 @@ client.on(
 
                 await enviarLog(
                     interaction.guild,
-                    embed
+                    logEmbed
                 );
 
                 return;
@@ -1671,6 +1776,8 @@ client.on(
                 interaction.commandName ===
                 "unmute"
             ) {
+
+                await interaction.deferReply();
 
                 const usuario =
                     interaction.options.getUser(
@@ -1687,10 +1794,67 @@ client.on(
                     `Mute quitado por ${interaction.user.tag}`
                 );
 
-                await interaction.reply({
-                    content:
-                        `🔊 ${usuario} ya puede volver a hablar.`
+                const embed =
+                    new EmbedBuilder()
+                        .setColor(0x57F287)
+                        .setTitle(
+                            "🔊 USUARIO DESILENCIADO"
+                        )
+                        .setDescription(
+                            `${usuario} ya puede volver a hablar.`
+                        )
+                        .addFields(
+                            {
+                                name: "👤 Usuario",
+                                value:
+                                    `${usuario}`
+                            },
+                            {
+                                name: "🛡️ Moderador",
+                                value:
+                                    `${interaction.user}`
+                            }
+                        )
+                        .setThumbnail(
+                            usuario.displayAvatarURL({
+                                extension: "png",
+                                size: 256
+                            })
+                        )
+                        .setFooter({
+                            text:
+                                "La Orden Morada • Moderación"
+                        })
+                        .setTimestamp();
+
+                await interaction.editReply({
+                    embeds: [embed]
                 });
+
+                const logEmbed =
+                    new EmbedBuilder()
+                        .setColor(0x57F287)
+                        .setTitle(
+                            "🔊 USUARIO DESILENCIADO"
+                        )
+                        .addFields(
+                            {
+                                name: "👤 Usuario",
+                                value:
+                                    `${usuario}`
+                            },
+                            {
+                                name: "🛡️ Moderador",
+                                value:
+                                    `${interaction.user}`
+                            }
+                        )
+                        .setTimestamp();
+
+                await enviarLog(
+                    interaction.guild,
+                    logEmbed
+                );
 
                 return;
             }
@@ -1704,6 +1868,8 @@ client.on(
                 "unban"
             ) {
 
+                await interaction.deferReply();
+
                 const id =
                     interaction.options.getString(
                         "id"
@@ -1714,10 +1880,61 @@ client.on(
                     `Unban realizado por ${interaction.user.tag}`
                 );
 
-                await interaction.reply({
-                    content:
-                        `🔓 El usuario con ID \`${id}\` fue desbaneado.`
+                const embed =
+                    new EmbedBuilder()
+                        .setColor(0x57F287)
+                        .setTitle(
+                            "🔓 USUARIO DESBANEADO"
+                        )
+                        .setDescription(
+                            `El usuario con ID \`${id}\` fue desbaneado correctamente.`
+                        )
+                        .addFields(
+                            {
+                                name: "🆔 ID",
+                                value:
+                                    `\`${id}\``
+                            },
+                            {
+                                name: "🛡️ Moderador",
+                                value:
+                                    `${interaction.user}`
+                            }
+                        )
+                        .setFooter({
+                            text:
+                                "La Orden Morada • Moderación"
+                        })
+                        .setTimestamp();
+
+                await interaction.editReply({
+                    embeds: [embed]
                 });
+
+                const logEmbed =
+                    new EmbedBuilder()
+                        .setColor(0x57F287)
+                        .setTitle(
+                            "🔓 USUARIO DESBANEADO"
+                        )
+                        .addFields(
+                            {
+                                name: "🆔 ID",
+                                value:
+                                    `\`${id}\``
+                            },
+                            {
+                                name: "🛡️ Moderador",
+                                value:
+                                    `${interaction.user}`
+                            }
+                        )
+                        .setTimestamp();
+
+                await enviarLog(
+                    interaction.guild,
+                    logEmbed
+                );
 
                 return;
             }
