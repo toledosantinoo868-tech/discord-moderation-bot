@@ -1910,6 +1910,9 @@ if (!TOKEN) {
     process.exit(1);
 }
 
+console.log("🚀 INDEX.JS INICIADO");
+console.log("🔑 TOKEN CONFIGURADO:", !!TOKEN);
+
 registrarComandos();
 
 client.login(TOKEN);
