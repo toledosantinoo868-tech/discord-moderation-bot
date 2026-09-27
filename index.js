@@ -8,58 +8,22 @@ const {
     SlashCommandBuilder,
     PermissionFlagsBits,
     EmbedBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-    ActionRowBuilder,
-    ChannelType,
-    PermissionsBitField
+    ChannelType
 } = require("discord.js");
 
 // =====================================================
-// CONFIGURACIÓN GLOBAL Y ROLES POR DEFECTO
+// CONFIGURACIÓN GLOBAL
 // =====================================================
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = "1552817688378605650";
 
 const OWNER_ROLE_ID = "1553559027697320026";
-const EVERYONE_ROLE_ID = "1553559599963963442";
-
 const BOT_COLOR = 0x3498DB;
 const FOOTER = "Bot creado por DEVLVdarkkidd";
 
-// Plantilla por defecto de la cual NINGÚN servidor escribe directamente
-const CONFIG_POR_DEFECTO = {
-    minecraftIp: "mc.eternalcraft.fun",
-    minecraftPort: "10096",
-    verifiedRoleId: null, // ID del rol de verificado para este servidor
-    welcomeChannelId: null,
-    welcomeTitle: "💙 ETERNAL CRAFT NETWORK",
-    welcomeText: "🎉 **¡Bienvenido/a a Eternal Craft Network, {user}!**\n\n💙 Esperamos que disfrutes de la comunidad.\n\n🔐 Recordá verificarte para poder participar en el servidor.",
-    welcomeBanner: null,
-    verifTitle: "🔵 ETERNAL CRAFT NETWORK",
-    verifDesc: "¡Bienvenido/a a **Eternal Craft Network**! 💙\n\nPara poder hablar y participar en el servidor, primero tenés que verificarte.\n\nPresioná el botón **✅ Verificarse** de abajo.\n\n🔐 Una vez verificado/a recibirás automáticamente el rol correspondiente.\n\n━━━━━━━━━━━━━━━━━━━━\n\n🟢 **Presioná el botón para verificarse.**",
-    verifBtnLabel: "Verificarse",
-    ticketTitle: "🎫 SOPORTE TÉCNICO Y TICKETS",
-    ticketDesc: "Si necesitas ayuda, reportar a un usuario o realizar una consulta al Staff, presiona el botón de abajo para abrir un ticket privado.",
-    ticketBtnLabel: "Abrir Ticket"
-};
-
-// =====================================================
-// ALMACENAMIENTO INDEPENDIENTE POR SERVIDOR (GUILD)
-// =====================================================
-
-const guildConfigs = new Map();
-
-function obtenerConfigServer(guildId) {
-    if (!guildId) return null;
-
-    if (!guildConfigs.has(guildId)) {
-        const copiaIndependiente = JSON.parse(JSON.stringify(CONFIG_POR_DEFECTO));
-        guildConfigs.set(guildId, copiaIndependiente);
-    }
-    return guildConfigs.get(guildId);
-}
+// Mapa para rastrear el spam: userId -> Array de timestamps
+const spamMap = new Map();
 
 // =====================================================
 // CLIENTE
@@ -75,12 +39,11 @@ const client = new Client({
 });
 
 // =====================================================
-// FUNCIONES AUXILIARES DE PERMISOS Y DURACIONES
+// FUNCIONES AUXILIARES
 // =====================================================
 
 function esAdminOOwner(interaction) {
     if (!interaction.guild) return false;
-
     return (
         interaction.guild.ownerId === interaction.user.id ||
         interaction.member.roles.cache.has(OWNER_ROLE_ID) ||
@@ -91,7 +54,6 @@ function esAdminOOwner(interaction) {
 
 function esStaff(interaction) {
     if (!interaction.guild) return false;
-
     return (
         esAdminOOwner(interaction) ||
         interaction.member.permissions.has(PermissionFlagsBits.ManageMessages)
@@ -101,8 +63,7 @@ function esStaff(interaction) {
 function puedeModerar(interaction, miembro) {
     if (!interaction.guild || !miembro) return false;
     if (interaction.guild.ownerId === interaction.user.id) return true;
-    if (miembro.id === interaction.guild.ownerId) return false;
-    if (miembro.id === interaction.user.id) return false;
+    if (miembro.id === interaction.guild.ownerId || miembro.id === interaction.user.id) return false;
 
     const ejecutor = interaction.member;
     if (!ejecutor) return false;
@@ -129,10 +90,6 @@ function convertirDuracion(entrada) {
     return cantidad * multiplicadores[unidad];
 }
 
-// =====================================================
-// LOGS
-// =====================================================
-
 async function enviarLog(guild, embed) {
     try {
         const canal = guild.channels.cache.find(
@@ -142,7 +99,6 @@ async function enviarLog(guild, embed) {
         );
 
         if (!canal) return;
-
         await canal.send({ embeds: [embed] });
     } catch (error) {
         console.error("Error enviando log:", error.message);
@@ -150,92 +106,10 @@ async function enviarLog(guild, embed) {
 }
 
 // =====================================================
-// GENERADORES DE PANELES POR SERVIDOR
-// =====================================================
-
-function crearPanelVerificacion(config) {
-    const embed = new EmbedBuilder()
-        .setColor(BOT_COLOR)
-        .setTitle(config.verifTitle)
-        .setDescription(config.verifDesc)
-        .setFooter({ text: FOOTER })
-        .setTimestamp();
-
-    const boton = new ButtonBuilder()
-        .setCustomId("eternal_verificar")
-        .setLabel(config.verifBtnLabel)
-        .setEmoji("✅")
-        .setStyle(ButtonStyle.Success);
-
-    const fila = new ActionRowBuilder().addComponents(boton);
-
-    return { embeds: [embed], components: [fila] };
-}
-
-function crearPanelTicket(config) {
-    const embed = new EmbedBuilder()
-        .setColor(BOT_COLOR)
-        .setTitle(config.ticketTitle)
-        .setDescription(config.ticketDesc)
-        .setFooter({ text: FOOTER })
-        .setTimestamp();
-
-    const boton = new ButtonBuilder()
-        .setCustomId("eternal_crear_ticket")
-        .setLabel(config.ticketBtnLabel)
-        .setEmoji("📩")
-        .setStyle(ButtonStyle.Primary);
-
-    const fila = new ActionRowBuilder().addComponents(boton);
-
-    return { embeds: [embed], components: [fila] };
-}
-
-// =====================================================
-// COMANDOS DE REGISTRO
+// REGISTRO DE COMANDOS SLASH
 // =====================================================
 
 const commands = [
-    new SlashCommandBuilder()
-        .setName("ip")
-        .setDescription("Muestra la IP del servidor de Minecraft."),
-
-    new SlashCommandBuilder()
-        .setName("setup")
-        .setDescription("Configuraciones dinámicas del servidor.")
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName("ip")
-                .setDescription("Cambia la IP y el Puerto del servidor de Minecraft.")
-                .addStringOption(opt => opt.setName("ip").setDescription("Nueva IP").setRequired(true))
-                .addStringOption(opt => opt.setName("puerto").setDescription("Nuevo Puerto").setRequired(false))
-        )
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName("bienvenidas")
-                .setDescription("Configura el mensaje y banner de bienvenida.")
-                .addStringOption(opt => opt.setName("titulo").setDescription("Nuevo título de bienvenida").setRequired(false))
-                .addStringOption(opt => opt.setName("texto").setDescription("Usa {user} para mencionar al miembro").setRequired(false))
-                .addStringOption(opt => opt.setName("banner").setDescription("URL de la imagen/GIF").setRequired(false))
-        )
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName("verificacion")
-                .setDescription("Configura el texto y el rol del panel de verificación.")
-                .addStringOption(opt => opt.setName("titulo").setDescription("Título del embed").setRequired(false))
-                .addStringOption(opt => opt.setName("descripcion").setDescription("Cuerpo del mensaje").setRequired(false))
-                .addStringOption(opt => opt.setName("boton").setDescription("Texto del botón").setRequired(false))
-                .addRoleOption(opt => opt.setName("rol").setDescription("Rol que otorgará al verificarse").setRequired(false))
-        )
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName("ticket")
-                .setDescription("Configura el panel y título del sistema de tickets.")
-                .addStringOption(opt => opt.setName("titulo").setDescription("Título del embed").setRequired(false))
-                .addStringOption(opt => opt.setName("descripcion").setDescription("Instrucciones del ticket").setRequired(false))
-                .addStringOption(opt => opt.setName("boton").setDescription("Texto del botón").setRequired(false))
-        ),
-
     new SlashCommandBuilder()
         .setName("clear")
         .setDescription("Elimina mensajes del canal.")
@@ -263,40 +137,20 @@ const commands = [
         .addStringOption(opt => opt.setName("id").setDescription("ID del usuario").setRequired(true)),
 
     new SlashCommandBuilder()
-        .setName("lock")
-        .setDescription("Bloquea canales.")
-        .addSubcommand(sub => sub.setName("canal").setDescription("Bloquea este canal"))
-        .addSubcommand(sub => sub.setName("general").setDescription("Bloquea todos los canales")),
-
-    new SlashCommandBuilder()
-        .setName("unlock")
-        .setDescription("Desbloquea canales.")
-        .addSubcommand(sub => sub.setName("canal").setDescription("Desbloquea este canal"))
-        .addSubcommand(sub => sub.setName("general").setDescription("Desbloquea todos los canales")),
-
-    new SlashCommandBuilder()
-        .setName("verificacion")
-        .setDescription("Envía el panel de verificación.")
-        .addSubcommand(sub => sub.setName("aqui").setDescription("Envía el panel en este canal")),
-
-    new SlashCommandBuilder()
-        .setName("bienvenidas")
-        .setDescription("Establece este canal para recibir miembros.")
-        .addSubcommand(sub => sub.setName("aqui").setDescription("Asigna este canal para bienvenidas")),
-
-    new SlashCommandBuilder()
-        .setName("ticket")
-        .setDescription("Envía el panel de tickets.")
-        .addSubcommand(sub => sub.setName("aqui").setDescription("Envía el panel de soporte aquí"))
+        .setName("create_msj")
+        .setDescription("Envía un mensaje personalizado estructurado.")
+        .addStringOption(opt => opt.setName("titulo").setDescription("Título del mensaje").setRequired(true))
+        .addStringOption(opt => opt.setName("contenido").setDescription("Texto principal del mensaje").setRequired(true))
+        .addChannelOption(opt => opt.setName("canal").setDescription("Canal de destino (opcional)").setRequired(false))
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 async function registrarComandos() {
     try {
-        console.log("🔄 Registrando comandos...");
+        console.log("🔄 Registrando comandos de moderación...");
         await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-        console.log(`✅ ${commands.length} comandos registrados.`);
+        console.log(`✅ Comandos registrados con éxito.`);
     } catch (error) {
         console.error("❌ Error registrando comandos:", error);
     }
@@ -309,287 +163,66 @@ async function registrarComandos() {
 client.once("ready", async () => {
     console.log("================================");
     console.log(`✅ Bot conectado como ${client.user.tag}`);
-    console.log("🔵 Eternal Craft Network");
     console.log("================================");
-
     await registrarComandos();
 });
 
 // =====================================================
-// NUEVO MIEMBRO
+// SISTEMA ANTI-SPAM
 // =====================================================
 
-client.on("guildMemberAdd", async member => {
-    try {
-        const config = obtenerConfigServer(member.guild.id);
-        if (!config.welcomeChannelId) return;
+client.on("messageCreate", async message => {
+    if (!message.guild || message.author.bot) return;
 
-        const canal = await member.guild.channels.fetch(config.welcomeChannelId);
-        if (!canal || !canal.isTextBased()) return;
+    // Los administradores ignoran la restricción de Anti-Spam
+    if (message.member && message.member.permissions.has(PermissionFlagsBits.Administrator)) return;
 
-        const avatar = member.displayAvatarURL({ extension: "png", size: 512 });
-        const textoPersonalizado = config.welcomeText.replace(/{user}/g, `${member}`);
+    const ahora = Date.now();
+    const tiempoLimite = 3000; // 3 segundos
+    const maxMensajes = 5; // Máximo 5 mensajes permitidos en el intervalo
 
-        const embed = new EmbedBuilder()
-            .setColor(BOT_COLOR)
-            .setTitle(config.welcomeTitle)
-            .setDescription(textoPersonalizado)
-            .setThumbnail(avatar)
-            .setFooter({ text: FOOTER })
-            .setTimestamp();
+    if (!spamMap.has(message.author.id)) {
+        spamMap.set(message.author.id, []);
+    }
 
-        if (config.welcomeBanner) {
-            embed.setImage(config.welcomeBanner);
+    const timestamps = spamMap.get(message.author.id);
+    timestamps.push(ahora);
+
+    // Filtrar timestamps antiguos
+    const filtrados = timestamps.filter(t => ahora - t < tiempoLimite);
+    spamMap.set(message.author.id, filtrados);
+
+    if (filtrados.length > maxMensajes) {
+        try {
+            await message.delete();
+            const aviso = await message.channel.send(`⚠️ ${message.author}, por favor evita enviar mensajes tan rápido (Anti-Spam).`);
+            setTimeout(() => aviso.delete().catch(() => {}), 4000);
+
+            const embedLog = new EmbedBuilder()
+                .setColor(0xE74C3C)
+                .setTitle("⚠️ ANTI-SPAM DETECTADO")
+                .setDescription(`Se detectó envío masivo de mensajes por parte de ${message.author}.`)
+                .addFields({ name: "📍 Canal", value: `${message.channel}` })
+                .setFooter({ text: FOOTER })
+                .setTimestamp();
+
+            await enviarLog(message.guild, embedLog);
+        } catch (error) {
+            console.error("Error al procesar el Anti-Spam:", error);
         }
-
-        await canal.send({
-            content: `👋 ¡Bienvenido/a ${member}!`,
-            embeds: [embed]
-        });
-    } catch (error) {
-        console.error("❌ Error en bienvenida:", error);
     }
 });
 
 // =====================================================
-// INTERACCIONES
+// INTERACCIONES Y COMANDOS
 // =====================================================
 
 client.on("interactionCreate", async interaction => {
     try {
-        if (!interaction.guild) return;
+        if (!interaction.isChatInputCommand() || !interaction.guild) return;
 
-        const configServer = obtenerConfigServer(interaction.guild.id);
-
-        // VERIFICACIÓN
-        if (interaction.isButton() && interaction.customId === "eternal_verificar") {
-            const miembro = interaction.member;
-
-            if (!configServer.verifiedRoleId) {
-                return interaction.reply({
-                    content: "❌ Este servidor no tiene configurado un rol de verificado. Pide a un administrador que use `/setup verificacion` e incluya el parámetro `rol`.",
-                    ephemeral: true
-                });
-            }
-
-            const rol = await interaction.guild.roles.fetch(configServer.verifiedRoleId).catch(() => null);
-
-            if (!rol) {
-                return interaction.reply({ content: "❌ El rol de verificado configurado ya no existe en este servidor.", ephemeral: true });
-            }
-
-            if (miembro.roles.cache.has(rol.id)) {
-                return interaction.reply({ content: "✅ Ya estás verificado/a.", ephemeral: true });
-            }
-
-            const bot = interaction.guild.members.me;
-
-            if (!bot || rol.position >= bot.roles.highest.position) {
-                return interaction.reply({ content: "❌ El rol del bot debe estar por encima del rol de Verificado en la lista de roles del servidor.", ephemeral: true });
-            }
-
-            await miembro.roles.add(rol, "Verificación completada");
-
-            const embed = new EmbedBuilder()
-                .setColor(0x2ECC71)
-                .setTitle("✅ VERIFICACIÓN COMPLETADA")
-                .setDescription(`¡Listo ${interaction.user}! 💜\n\nRecibiste el rol ${rol} y ya podés participar en el servidor.`)
-                .setFooter({ text: FOOTER })
-                .setTimestamp();
-
-            return interaction.reply({ embeds: [embed], ephemeral: true });
-        }
-
-        // TICKET: CREACIÓN
-        if (interaction.isButton() && interaction.customId === "eternal_crear_ticket") {
-            const guild = interaction.guild;
-            const user = interaction.user;
-
-            const canalExistente = guild.channels.cache.find(
-                c => c.name === `ticket-${user.username.toLowerCase().replace(/[^a-z0-9]/g, "")}`
-            );
-
-            if (canalExistente) {
-                return interaction.reply({
-                    content: `❌ Ya tenés un ticket abierto en ${canalExistente}`,
-                    ephemeral: true
-                });
-            }
-
-            const canalTicket = await guild.channels.create({
-                name: `ticket-${user.username}`,
-                type: ChannelType.GuildText,
-                permissionOverwrites: [
-                    {
-                        id: EVERYONE_ROLE_ID,
-                        deny: [PermissionsBitField.Flags.ViewChannel]
-                    },
-                    {
-                        id: user.id,
-                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles]
-                    },
-                    {
-                        id: OWNER_ROLE_ID,
-                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageChannels]
-                    }
-                ]
-            });
-
-            const embedTicket = new EmbedBuilder()
-                .setColor(BOT_COLOR)
-                .setTitle(`🎫 Ticket de ${user.username}`)
-                .setDescription("Un miembro del Staff se pondrá en contacto contigo a la brevedad.\nPara cerrar este ticket presiona el botón de abajo.")
-                .setFooter({ text: FOOTER })
-                .setTimestamp();
-
-            const btnCerrar = new ButtonBuilder()
-                .setCustomId("eternal_cerrar_ticket")
-                .setLabel("Cerrar Ticket")
-                .setEmoji("🔒")
-                .setStyle(ButtonStyle.Danger);
-
-            const fila = new ActionRowBuilder().addComponents(btnCerrar);
-
-            await canalTicket.send({ content: `${user} \vert{} <@&${OWNER_ROLE_ID}>`, embeds: [embedTicket], components: [fila] });
-
-            return interaction.reply({
-                content: `✅ Ticket creado exitosamente: ${canalTicket}`,
-                ephemeral: true
-            });
-        }
-
-        // TICKET: CERRAR
-        if (interaction.isButton() && interaction.customId === "eternal_cerrar_ticket") {
-            await interaction.reply({ content: "🔒 El ticket se cerrará en 5 segundos..." });
-            setTimeout(async () => {
-                try {
-                    await interaction.channel.delete();
-                } catch (e) {
-                    console.error("Error al borrar canal de ticket:", e);
-                }
-            }, 5000);
-            return;
-        }
-
-        if (!interaction.isChatInputCommand()) return;
-
-        // /IP
-        if (interaction.commandName === "ip") {
-            const embed = new EmbedBuilder()
-                .setColor(BOT_COLOR)
-                .setTitle("🎮 SERVIDOR DE MINECRAFT")
-                .setDescription("Conectate a nuestro servidor:")
-                .addFields(
-                    { name: "🌐 IP", value: `\`${configServer.minecraftIp}\``, inline: true },
-                    { name: "🔌 Puerto", value: `\`${configServer.minecraftPort}\``, inline: true }
-                )
-                .setFooter({ text: FOOTER })
-                .setTimestamp();
-
-            return interaction.reply({ embeds: [embed] });
-        }
-
-        // /SETUP
-        if (interaction.commandName === "setup") {
-            if (!esAdminOOwner(interaction)) {
-                return interaction.reply({ content: "❌ Necesitas el permiso de **Administrar Servidor** o ser Owner para usar este comando.", ephemeral: true });
-            }
-
-            const subcomando = interaction.options.getSubcommand();
-
-            if (subcomando === "ip") {
-                const nuevaIp = interaction.options.getString("ip");
-                const nuevoPuerto = interaction.options.getString("puerto");
-
-                configServer.minecraftIp = nuevaIp;
-                if (nuevoPuerto) configServer.minecraftPort = nuevoPuerto;
-
-                return interaction.reply({ content: `✅ **IP actualizada:** \`${configServer.minecraftIp}\` | **Puerto:** \`${configServer.minecraftPort}\``, ephemeral: true });
-            }
-
-            if (subcomando === "bienvenidas") {
-                const titulo = interaction.options.getString("titulo");
-                const texto = interaction.options.getString("texto");
-                const banner = interaction.options.getString("banner");
-
-                if (titulo) configServer.welcomeTitle = titulo;
-                if (texto) configServer.welcomeText = texto;
-                if (banner) configServer.welcomeBanner = banner;
-
-                return interaction.reply({ content: "✅ Ajustes de **Bienvenidas** actualizados en este servidor.", ephemeral: true });
-            }
-
-            if (subcomando === "verificacion") {
-                const titulo = interaction.options.getString("titulo");
-                const desc = interaction.options.getString("descripcion");
-                const boton = interaction.options.getString("boton");
-                const rol = interaction.options.getRole("rol");
-
-                if (titulo) configServer.verifTitle = titulo;
-                if (desc) configServer.verifDesc = desc;
-                if (boton) configServer.verifBtnLabel = boton;
-                if (rol) configServer.verifiedRoleId = rol.id;
-
-                let respuesta = "✅ Ajustes de **Verificación** actualizados.";
-                if (rol) respuesta += `\n🎭 **Rol asignado:** ${rol}`;
-                respuesta += "\n\nRecuerda usar `/verificacion aqui` para actualizar el panel en el canal.";
-
-                return interaction.reply({ content: respuesta, ephemeral: true });
-            }
-
-            if (subcomando === "ticket") {
-                const titulo = interaction.options.getString("titulo");
-                const desc = interaction.options.getString("descripcion");
-                const boton = interaction.options.getString("boton");
-
-                if (titulo) configServer.ticketTitle = titulo;
-                if (desc) configServer.ticketDesc = desc;
-                if (boton) configServer.ticketBtnLabel = boton;
-
-                return interaction.reply({ content: "✅ Ajustes de **Tickets** actualizados. Vuelve a enviar el panel con `/ticket aqui`.", ephemeral: true });
-            }
-        }
-
-        // /VERIFICACION
-        if (interaction.commandName === "verificacion") {
-            if (!esAdminOOwner(interaction)) {
-                return interaction.reply({ content: "❌ Necesitas el permiso de **Administrar Servidor** o ser Owner para usar este comando.", ephemeral: true });
-            }
-
-            if (interaction.options.getSubcommand() === "aqui") {
-                await interaction.channel.send(crearPanelVerificacion(configServer));
-                return interaction.reply({ content: "✅ Panel de verificación enviado en este servidor.", ephemeral: true });
-            }
-        }
-
-        // /TICKET
-        if (interaction.commandName === "ticket") {
-            if (!esAdminOOwner(interaction)) {
-                return interaction.reply({ content: "❌ Necesitas el permiso de **Administrar Servidor** o ser Owner para usar este comando.", ephemeral: true });
-            }
-
-            if (interaction.options.getSubcommand() === "aqui") {
-                await interaction.channel.send(crearPanelTicket(configServer));
-                return interaction.reply({ content: "✅ Panel de tickets enviado en este servidor.", ephemeral: true });
-            }
-        }
-
-        // /BIENVENIDAS
-        if (interaction.commandName === "bienvenidas") {
-            if (!esAdminOOwner(interaction)) {
-                return interaction.reply({ content: "❌ Necesitas el permiso de **Administrar Servidor** o ser Owner para usar este comando.", ephemeral: true });
-            }
-
-            configServer.welcomeChannelId = interaction.channel.id;
-            return interaction.reply({ content: `✅ Este canal quedó configurado para bienvenidas en este servidor.\n\n📍 Canal: ${interaction.channel}`, ephemeral: true });
-        }
-
-        // COMANDOS DE MODERACIÓN Y STAFF
-        const comandosStaff = ["clear", "mute", "unmute", "ban", "unban", "lock", "unlock"];
-        if (comandosStaff.includes(interaction.commandName)) {
-            if (!esStaff(interaction)) {
-                return interaction.reply({ content: "❌ No tenés permisos para utilizar este comando.", ephemeral: true });
-            }
+        if (!esStaff(interaction)) {
+            return interaction.reply({ content: "❌ No tienes permisos de Staff para ejecutar este comando.", ephemeral: true });
         }
 
         // /CLEAR
@@ -618,24 +251,29 @@ client.on("interactionCreate", async interaction => {
         if (interaction.commandName === "mute") {
             const usuario = interaction.options.getUser("usuario");
             const duracion = interaction.options.getString("duracion");
-            const miembro = await interaction.guild.members.fetch(usuario.id);
+            const miembro = await interaction.guild.members.fetch(usuario.id).catch(() => null);
+
+            if (!miembro) return interaction.reply({ content: "❌ El usuario no pertenece al servidor.", ephemeral: true });
 
             if (!puedeModerar(interaction, miembro)) {
-                return interaction.reply({ content: "❌ No podés moderar a este usuario por su jerarquía.", ephemeral: true });
+                return interaction.reply({ content: "❌ No puedes moderar a este usuario por su jerarquía de roles.", ephemeral: true });
             }
 
             const tiempo = convertirDuracion(duracion);
             if (!tiempo || tiempo <= 0 || tiempo > 28 * 24 * 60 * 60 * 1000) {
-                return interaction.reply({ content: "❌ Usa formatos como `30s`, `5m`, `1h` o `1d` (Máx 28d).", ephemeral: true });
+                return interaction.reply({ content: "❌ Formato inválido. Utiliza: `30s` (segundos), `5m` (minutos), `1h` (horas) o `1d` (días). Máximo 28 días.", ephemeral: true });
             }
 
-            await miembro.timeout(tiempo, `Mute por ${interaction.user.tag}`);
+            await miembro.timeout(tiempo, `Mute aplicado por ${interaction.user.tag}`);
 
             const embed = new EmbedBuilder()
                 .setColor(BOT_COLOR)
                 .setTitle("🔇 USUARIO SILENCIADO")
-                .setDescription(`${usuario} fue silenciado correctamente.`)
-                .addFields({ name: "⏱️ Duración", value: duracion }, { name: "👮 Moderador", value: `${interaction.user}` })
+                .setDescription(`${usuario} ha sido silenciado correctamente.`)
+                .addFields(
+                    { name: "⏱️ Duración", value: duracion, inline: true },
+                    { name: "👮 Moderador", value: `${interaction.user}`, inline: true }
+                )
                 .setFooter({ text: FOOTER })
                 .setTimestamp();
 
@@ -647,18 +285,21 @@ client.on("interactionCreate", async interaction => {
         // /UNMUTE
         if (interaction.commandName === "unmute") {
             const usuario = interaction.options.getUser("usuario");
-            const miembro = await interaction.guild.members.fetch(usuario.id);
+            const miembro = await interaction.guild.members.fetch(usuario.id).catch(() => null);
+
+            if (!miembro) return interaction.reply({ content: "❌ El usuario no se encuentra en el servidor.", ephemeral: true });
 
             if (!puedeModerar(interaction, miembro)) {
-                return interaction.reply({ content: "❌ No podés modificar a este usuario.", ephemeral: true });
+                return interaction.reply({ content: "❌ No puedes modificar la sanción a este usuario.", ephemeral: true });
             }
 
-            await miembro.timeout(null, `Unmute por ${interaction.user.tag}`);
+            await miembro.timeout(null, `Unmute realizado por ${interaction.user.tag}`);
 
             const embed = new EmbedBuilder()
                 .setColor(0x2ECC71)
                 .setTitle("🔊 MUTE REMOVIDO")
-                .setDescription(`${usuario} ya puede volver a hablar.`)
+                .setDescription(`${usuario} ya no se encuentra silenciado.`)
+                .addFields({ name: "👮 Moderador", value: `${interaction.user}` })
                 .setFooter({ text: FOOTER })
                 .setTimestamp();
 
@@ -670,13 +311,13 @@ client.on("interactionCreate", async interaction => {
         // /BAN
         if (interaction.commandName === "ban") {
             const usuario = interaction.options.getUser("usuario");
-            const miembro = await interaction.guild.members.fetch(usuario.id);
+            const miembro = await interaction.guild.members.fetch(usuario.id).catch(() => null);
 
-            if (!puedeModerar(interaction, miembro)) {
-                return interaction.reply({ content: "❌ No podés banear a este usuario.", ephemeral: true });
+            if (miembro && !puedeModerar(interaction, miembro)) {
+                return interaction.reply({ content: "❌ No puedes banear a este usuario por su jerarquía de roles.", ephemeral: true });
             }
 
-            await miembro.ban({ reason: `Ban por ${interaction.user.tag}` });
+            await interaction.guild.members.ban(usuario.id, { reason: `Baneado por ${interaction.user.tag}` });
 
             const embed = new EmbedBuilder()
                 .setColor(0xE74C3C)
@@ -700,12 +341,13 @@ client.on("interactionCreate", async interaction => {
             }
 
             try {
-                await interaction.guild.members.unban(id, `Unban por ${interaction.user.tag}`);
+                await interaction.guild.members.unban(id, `Desbaneado por ${interaction.user.tag}`);
 
                 const embed = new EmbedBuilder()
                     .setColor(0x2ECC71)
                     .setTitle("🔓 USUARIO DESBANEADO")
                     .setDescription(`La ID \`${id}\` fue desbaneada exitosamente.`)
+                    .addFields({ name: "👮 Moderador", value: `${interaction.user}` })
                     .setFooter({ text: FOOTER })
                     .setTimestamp();
 
@@ -717,48 +359,31 @@ client.on("interactionCreate", async interaction => {
             return;
         }
 
-        // /LOCK
-        if (interaction.commandName === "lock") {
-            const subcomando = interaction.options.getSubcommand();
+        // /CREATE_MSJ
+        if (interaction.commandName === "create_msj") {
+            const titulo = interaction.options.getString("titulo");
+            const contenido = interaction.options.getString("contenido");
+            const canalDestino = interaction.options.getChannel("canal") || interaction.channel;
 
-            if (subcomando === "canal") {
-                await interaction.channel.permissionOverwrites.edit(EVERYONE_ROLE_ID, { SendMessages: false });
-                return interaction.reply({ content: "🔒 Canal bloqueado para `@everyone`." });
+            if (!canalDestino.isTextBased()) {
+                return interaction.reply({ content: "❌ El canal seleccionado debe ser de texto.", ephemeral: true });
             }
 
-            if (subcomando === "general") {
-                await interaction.deferReply();
-                const canales = interaction.guild.channels.cache.filter(c => c.type === ChannelType.GuildText);
-                for (const [, canal] of canales) {
-                    await canal.permissionOverwrites.edit(EVERYONE_ROLE_ID, { SendMessages: false });
-                }
-                return interaction.editReply({ content: "🔒 Todos los canales de texto fueron bloqueados." });
-            }
-        }
+            const embedMsj = new EmbedBuilder()
+                .setColor(BOT_COLOR)
+                .setTitle(titulo)
+                .setDescription(contenido.replace(/\\n/g, "\n"))
+                .setFooter({ text: FOOTER })
+                .setTimestamp();
 
-        // /UNLOCK
-        if (interaction.commandName === "unlock") {
-            const subcomando = interaction.options.getSubcommand();
-
-            if (subcomando === "canal") {
-                await interaction.channel.permissionOverwrites.edit(EVERYONE_ROLE_ID, { SendMessages: null });
-                return interaction.reply({ content: "🔓 Canal desbloqueado." });
-            }
-
-            if (subcomando === "general") {
-                await interaction.deferReply();
-                const canales = interaction.guild.channels.cache.filter(c => c.type === ChannelType.GuildText);
-                for (const [, canal] of canales) {
-                    await canal.permissionOverwrites.edit(EVERYONE_ROLE_ID, { SendMessages: null });
-                }
-                return interaction.editReply({ content: "🔓 Todos los canales de texto fueron desbloqueados." });
-            }
+            await canalDestino.send({ embeds: [embedMsj] });
+            return interaction.reply({ content: `✅ Mensaje enviado exitosamente en ${canalDestino}.`, ephemeral: true });
         }
 
     } catch (error) {
-        console.error("Error al procesar la interacción:", error);
+        console.error("Error procesando interacción:", error);
         if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: "❌ Ocurrió un error inesperado.", ephemeral: true });
+            await interaction.reply({ content: "❌ Ocurrió un error al ejecutar el comando.", ephemeral: true });
         }
     }
 });
