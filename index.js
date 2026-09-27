@@ -53,7 +53,6 @@ let verifDesc = "¡Bienvenido/a a **Eternal Craft Network**! 💙\n\nPara poder 
 let verifBtnLabel = "Verificarse";
 
 // Tickets
-let ticketCategoryChannelId = null;
 let ticketTitle = "🎫 SOPORTE TÉCNICO Y TICKETS";
 let ticketDesc = "Si necesitas ayuda, reportar a un usuario o realizar una consulta al Staff, presiona el botón de abajo para abrir un ticket privado.";
 let ticketBtnLabel = "Abrir Ticket";
@@ -72,15 +71,18 @@ const client = new Client({
 });
 
 // =====================================================
-// FUNCIONES AUXILIARES
+// FUNCIONES AUXILIARES DE PERMISOS
 // =====================================================
 
-function esOwner(interaction) {
+// Ahora permite ejecutar comandos si es Owner, si tiene el rol de Owner o si tiene el permiso de Administrar Servidor / Administrador
+function esAdminOOwner(interaction) {
     if (!interaction.guild) return false;
 
     return (
         interaction.guild.ownerId === interaction.user.id ||
-        interaction.member.roles.cache.has(OWNER_ROLE_ID)
+        interaction.member.roles.cache.has(OWNER_ROLE_ID) ||
+        interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
+        interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)
     );
 }
 
@@ -88,8 +90,7 @@ function esStaff(interaction) {
     if (!interaction.guild) return false;
 
     return (
-        esOwner(interaction) ||
-        interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
+        esAdminOOwner(interaction) ||
         interaction.member.permissions.has(PermissionFlagsBits.ManageMessages)
     );
 }
@@ -471,10 +472,10 @@ client.on("interactionCreate", async interaction => {
             return interaction.reply({ embeds: [embed] });
         }
 
-        // /SETUP (EDITAR TODO)
+        // /SETUP (EDITAR TODO - REQUIERE PERMISO ADMINISTRAR SERVIDOR U OWNER)
         if (interaction.commandName === "setup") {
-            if (!esOwner(interaction)) {
-                return interaction.reply({ content: "❌ Solo el Owner puede utilizar este comando.", ephemeral: true });
+            if (!esAdminOOwner(interaction)) {
+                return interaction.reply({ content: "❌ Necesitas el permiso de **Administrar Servidor** o ser Owner para usar este comando.", ephemeral: true });
             }
 
             const subcomando = interaction.options.getSubcommand();
@@ -528,8 +529,8 @@ client.on("interactionCreate", async interaction => {
 
         // /VERIFICACION
         if (interaction.commandName === "verificacion") {
-            if (!esOwner(interaction)) {
-                return interaction.reply({ content: "❌ Solo el Owner puede utilizar este comando.", ephemeral: true });
+            if (!esAdminOOwner(interaction)) {
+                return interaction.reply({ content: "❌ Necesitas el permiso de **Administrar Servidor** o ser Owner para usar este comando.", ephemeral: true });
             }
 
             if (interaction.options.getSubcommand() === "aqui") {
@@ -540,8 +541,8 @@ client.on("interactionCreate", async interaction => {
 
         // /TICKET
         if (interaction.commandName === "ticket") {
-            if (!esOwner(interaction)) {
-                return interaction.reply({ content: "❌ Solo el Owner puede utilizar este comando.", ephemeral: true });
+            if (!esAdminOOwner(interaction)) {
+                return interaction.reply({ content: "❌ Necesitas el permiso de **Administrar Servidor** o ser Owner para usar este comando.", ephemeral: true });
             }
 
             if (interaction.options.getSubcommand() === "aqui") {
@@ -552,8 +553,8 @@ client.on("interactionCreate", async interaction => {
 
         // /BIENVENIDAS
         if (interaction.commandName === "bienvenidas") {
-            if (!esOwner(interaction)) {
-                return interaction.reply({ content: "❌ Solo el Owner puede utilizar este comando.", ephemeral: true });
+            if (!esAdminOOwner(interaction)) {
+                return interaction.reply({ content: "❌ Necesitas el permiso de **Administrar Servidor** o ser Owner para usar este comando.", ephemeral: true });
             }
 
             welcomeChannelId = interaction.channel.id;
