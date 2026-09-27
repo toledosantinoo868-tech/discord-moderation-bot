@@ -16,60 +16,111 @@ const {
 const http = require("http");
 
 // =====================================================
-// CONFIGURACIÓN
+// CONFIGURACIÓN GENERAL
 // =====================================================
 
 const CLIENT_ID = "1552817688378605650";
 const TOKEN = process.env.DISCORD_TOKEN;
 
-// =====================================================
-// ROLES
-// =====================================================
-
-const OWNER_ROLE_ID = "1531489394127536188";
-const STAFF_ROLE_ID = "1532574929235607632";
-const MOD_ROLE_ID = "1538995243490353263";
-const VERIFY_ROLE_ID = "1544521207708131409";
+const PORT = Number(process.env.PORT) || 10000;
 
 // =====================================================
-// CANALES
+// CONFIGURACIÓN DE LOS 2 DISCORD
 // =====================================================
 
-const WELCOME_CHANNEL_ID = "1531493723840450580";
-const LOG_CHANNEL_ID = "1544504719047917610";
-const VERIFY_CHANNEL_ID = "1544523269376450590";
+const SERVIDORES = {
+
+    // =================================================
+    // DISCORD 1
+    // =================================================
+
+    "1504878187383885956": {
+
+        nombre: "Discord 1",
+
+        roles: {
+            owner: "1531489394127536188",
+            staff: "1532574929235607632",
+            mod: "1538995243490353263",
+            verify: "1544521207708131409"
+        },
+
+        canales: {
+            welcome: "1531493723840450580",
+            logs: "1544504719047917610",
+            verify: "1544523269376450590",
+            tickets: "1533646002878283936"
+        },
+
+        categoriaTickets: "1532906564569272401"
+    },
+
+    // =================================================
+    // DISCORD 2
+    // =================================================
+
+    "1553558771706626089": {
+
+        nombre: "Discord 2",
+
+        roles: {
+            owner: "1553559027697320026",
+            coowner: "1553561615314591866",
+            admin: "1553559320644427796",
+            adminJunior: "1553559176985190541",
+            mod: "1553559498533249135",
+            verify: "1553558969924984862"
+        },
+
+        canales: {
+            welcome: "1553577251604271175",
+            logs: "1553583452186615818",
+            verify: "1553582721878724648",
+            tickets: "1553583694642417834"
+        },
+
+        categoriaTickets: "1553582203378737162"
+    }
+};
 
 // =====================================================
-// TICKETS
+// OBTENER CONFIGURACIÓN
 // =====================================================
 
-const TICKET_PANEL_CHANNEL_ID = "1533646002878283936";
-const TICKET_CATEGORY_ID = "1532906564569272401";
+function getConfig(guild) {
+    if (!guild) return null;
+
+    return SERVIDORES[guild.id] || null;
+}
 
 // =====================================================
 // SERVIDOR HTTP
-// Compatible con Wisbyte y otros hostings
 // =====================================================
 
-const PORT = Number(process.env.PORT) || 10000;
-
 const httpServer = http.createServer((req, res) => {
+
     res.writeHead(200, {
         "Content-Type": "text/plain; charset=utf-8"
     });
 
     res.end("Discord bot online");
+
 });
 
 httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`🌐 Servidor HTTP escuchando en el puerto ${PORT}`);
+
+    console.log(
+        `🌐 Servidor HTTP escuchando en puerto ${PORT}`
+    );
+
 });
 
 // =====================================================
-// CLIENTE DISCORD
+// CLIENTE
 // =====================================================
 
 const client = new Client({
+
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMembers,
@@ -81,24 +132,15 @@ const client = new Client({
         Partials.Message,
         Partials.Channel
     ]
+
 });
 
 // =====================================================
-// CACHE DE MENSAJES
+// CACHE
 // =====================================================
 
 const messageCache = new Map();
-
-// =====================================================
-// ADVERTENCIAS
-// =====================================================
-
 const warnings = new Map();
-
-// =====================================================
-// ANTI-SPAM
-// =====================================================
-
 const spamTracker = new Map();
 
 const SPAM_MESSAGE_LIMIT = 5;
@@ -106,49 +148,114 @@ const SPAM_WINDOW = 5000;
 const SPAM_TIMEOUT = 30 * 1000;
 
 // =====================================================
-// FUNCIONES DE PERMISOS
+// PERMISOS
 // =====================================================
 
+function tieneRol(member, id) {
+
+    return Boolean(
+        id &&
+        member?.roles?.cache?.has(id)
+    );
+
+}
+
 function esOwner(interaction) {
+
     if (!interaction.guild) return false;
+
+    const config =
+        getConfig(interaction.guild);
+
+    if (!config) return false;
 
     return (
         interaction.guild.ownerId === interaction.user.id ||
-        interaction.member?.roles?.cache?.has(OWNER_ROLE_ID)
+        tieneRol(
+            interaction.member,
+            config.roles.owner
+        )
     );
+
 }
 
 function esStaff(interaction) {
+
     if (!interaction.guild) return false;
 
+    const config =
+        getConfig(interaction.guild);
+
+    if (!config) return false;
+
+    const member =
+        interaction.member;
+
+    if (!member) return false;
+
     return (
+
         esOwner(interaction) ||
-        interaction.member?.roles?.cache?.has(STAFF_ROLE_ID) ||
-        interaction.member?.roles?.cache?.has(MOD_ROLE_ID) ||
-        interaction.member?.permissions?.has(
+
+        tieneRol(
+            member,
+            config.roles.coowner
+        ) ||
+
+        tieneRol(
+            member,
+            config.roles.admin
+        ) ||
+
+        tieneRol(
+            member,
+            config.roles.adminJunior
+        ) ||
+
+        tieneRol(
+            member,
+            config.roles.staff
+        ) ||
+
+        tieneRol(
+            member,
+            config.roles.mod
+        ) ||
+
+        member.permissions.has(
             PermissionFlagsBits.Administrator
         )
+
     );
+
 }
 
 // =====================================================
-// PROTECCIÓN DE JERARQUÍA
+// JERARQUÍA
 // =====================================================
 
 function puedeModerar(interaction, miembro) {
+
     if (!interaction.guild || !miembro) {
         return false;
     }
 
-    if (interaction.guild.ownerId === interaction.user.id) {
+    if (
+        interaction.guild.ownerId ===
+        interaction.user.id
+    ) {
         return true;
     }
 
-    if (miembro.id === interaction.guild.ownerId) {
+    if (
+        miembro.id ===
+        interaction.guild.ownerId
+    ) {
         return false;
     }
 
-    const ejecutor = interaction.member;
+    const ejecutor =
+        interaction.member;
 
     if (!ejecutor) {
         return false;
@@ -158,60 +265,79 @@ function puedeModerar(interaction, miembro) {
         miembro.roles.highest.position <
         ejecutor.roles.highest.position
     );
+
 }
 
 // =====================================================
-// GUARDAR MENSAJE
+// GUARDAR MENSAJES
 // =====================================================
 
 function guardarMensaje(message) {
+
     if (!message) return;
     if (!message.id) return;
     if (!message.guild) return;
     if (message.author?.bot) return;
 
-    messageCache.set(message.id, {
-        id: message.id,
-        guildId: message.guild.id,
-        channelId: message.channel?.id,
-        channelName: message.channel?.name || "desconocido",
-        authorId: message.author?.id,
-        authorTag: message.author?.tag || "Desconocido",
-        authorAvatar: message.author?.displayAvatarURL({
-            extension: "png",
-            size: 256
-        }),
-        content: message.content || ""
-    });
+    messageCache.set(
+        message.id,
+        {
+            id: message.id,
+            guildId: message.guild.id,
+            channelId: message.channel?.id,
+            channelName:
+                message.channel?.name ||
+                "desconocido",
+            authorId:
+                message.author?.id,
+            authorTag:
+                message.author?.tag ||
+                "Desconocido",
+            authorAvatar:
+                message.author?.displayAvatarURL({
+                    extension: "png",
+                    size: 256
+                }),
+            content:
+                message.content || ""
+        }
+    );
 
     if (messageCache.size > 5000) {
+
         const primero =
             messageCache.keys().next().value;
 
         if (primero) {
             messageCache.delete(primero);
         }
+
     }
+
 }
 
 // =====================================================
-// ENVIAR LOG
+// LOGS
 // =====================================================
 
 async function enviarLog(guild, embed) {
+
     try {
-        if (!guild) return;
+
+        const config =
+            getConfig(guild);
+
+        if (!config) return;
 
         const canal =
-            await guild.channels.fetch(LOG_CHANNEL_ID);
+            await guild.channels.fetch(
+                config.canales.logs
+            );
 
-        if (!canal) {
-            console.log("❌ No existe el canal de logs.");
-            return;
-        }
-
-        if (!canal.isTextBased()) {
-            console.log("❌ El canal de logs no es de texto.");
+        if (
+            !canal ||
+            !canal.isTextBased()
+        ) {
             return;
         }
 
@@ -220,42 +346,72 @@ async function enviarLog(guild, embed) {
         });
 
     } catch (error) {
+
         console.error(
             "❌ ERROR ENVIANDO LOG:",
             error.message || error
         );
+
     }
+
 }
 
 // =====================================================
-// PARSEAR DURACIÓN
+// DURACIONES
 // =====================================================
 
 function convertirDuracion(entrada) {
-    if (!entrada || typeof entrada !== "string") {
+
+    if (
+        !entrada ||
+        typeof entrada !== "string"
+    ) {
         return null;
     }
 
     const match =
-        entrada.trim().match(
-            /^(\d+)\s*(s|m|h|d)$/i
-        );
+        entrada
+            .trim()
+            .match(
+                /^(\d+)\s*(s|m|h|d)$/i
+            );
 
     if (!match) {
         return null;
     }
 
-    const cantidad = Number(match[1]);
-    const unidad = match[2].toLowerCase();
+    const cantidad =
+        Number(match[1]);
+
+    const unidad =
+        match[2].toLowerCase();
 
     const multiplicadores = {
+
         s: 1000,
-        m: 60 * 1000,
-        h: 60 * 60 * 1000,
-        d: 24 * 60 * 60 * 1000
+
+        m:
+            60 *
+            1000,
+
+        h:
+            60 *
+            60 *
+            1000,
+
+        d:
+            24 *
+            60 *
+            60 *
+            1000
+
     };
 
-    return cantidad * multiplicadores[unidad];
+    return (
+        cantidad *
+        multiplicadores[unidad]
+    );
+
 }
 
 // =====================================================
@@ -263,41 +419,63 @@ function convertirDuracion(entrada) {
 // =====================================================
 
 function crearPanelVerificacion() {
+
     const embed =
         new EmbedBuilder()
+
             .setColor(0x8E44AD)
-            .setTitle("🛡️ VERIFICACIÓN — LA ORDEN MORADA")
+
+            .setTitle(
+                "🛡️ VERIFICACIÓN"
+            )
+
             .setDescription(
-                "¡Bienvenido/a a **La Orden Morada**! 💜\n\n" +
-                "Para acceder al servidor, primero tenés que verificarte.\n\n" +
-                "Al presionar **✅ Verificar**, aceptás respetar " +
-                "las reglas y normas de la comunidad.\n\n" +
-                "🔐 Una vez verificado/a, recibirás automáticamente " +
-                "el rol correspondiente.\n\n" +
-                "💜 ¡Gracias por formar parte de **La Orden Morada**!\n\n" +
+                "¡Bienvenido/a! 💜\n\n" +
+                "Para acceder al servidor primero tenés que verificarte.\n\n" +
+                "Al presionar **✅ Verificar**, recibirás automáticamente " +
+                "el rol de usuario verificado.\n\n" +
+                "📜 Antes de verificarte, asegurate de leer las reglas.\n\n" +
+                "🔐 Una vez verificado/a podrás acceder al resto del servidor.\n\n" +
                 "━━━━━━━━━━━━━━━━━━━━\n\n" +
                 "🟢 **Presioná el botón de abajo para verificarte.**"
             )
+
             .setFooter({
-                text: "La Orden Morada • Verificación"
+                text:
+                    "Sistema de verificación"
             })
+
             .setTimestamp();
 
     const boton =
         new ButtonBuilder()
-            .setCustomId("verificar_usuario")
-            .setLabel("Verificar")
+
+            .setCustomId(
+                "verificar_usuario"
+            )
+
+            .setLabel(
+                "Verificar"
+            )
+
             .setEmoji("✅")
-            .setStyle(ButtonStyle.Success);
+
+            .setStyle(
+                ButtonStyle.Success
+            );
 
     const fila =
         new ActionRowBuilder()
             .addComponents(boton);
 
     return {
+
         embeds: [embed],
+
         components: [fila]
+
     };
+
 }
 
 // =====================================================
@@ -305,101 +483,161 @@ function crearPanelVerificacion() {
 // =====================================================
 
 function crearPanelTickets() {
+
     const embed =
         new EmbedBuilder()
+
             .setColor(0x5865F2)
-            .setTitle("🎫 SOPORTE — LA ORDEN MORADA")
+
+            .setTitle(
+                "🎫 SOPORTE"
+            )
+
             .setDescription(
                 "¿Necesitás ayuda? 💜\n\n" +
                 "Nuestro equipo está disponible para ayudarte.\n\n" +
-                "🎫 **¿Cómo abrir un ticket?**\n" +
+                "🎫 **Abrir un ticket**\n" +
                 "Presioná el botón **🎫 Crear ticket**.\n\n" +
-                "🔒 El ticket será privado.\n\n" +
-                "📌 **Antes de abrir un ticket:**\n" +
-                "• Explicá claramente tu problema.\n" +
-                "• No abras tickets innecesarios.\n" +
-                "• Esperá al equipo.\n" +
-                "• No hagas spam.\n\n" +
+                "🔒 El ticket será privado y solamente podrán verlo vos y el equipo correspondiente.\n\n" +
+                "📌 Explicá claramente tu problema y esperá al Staff.\n\n" +
                 "━━━━━━━━━━━━━━━━━━━━\n\n" +
                 "🟢 **Presioná el botón para abrir un ticket.**"
             )
+
             .setFooter({
-                text: "La Orden Morada • Sistema de soporte"
+                text:
+                    "Sistema de soporte"
             })
+
             .setTimestamp();
 
     const boton =
         new ButtonBuilder()
-            .setCustomId("crear_ticket")
-            .setLabel("Crear ticket")
+
+            .setCustomId(
+                "crear_ticket"
+            )
+
+            .setLabel(
+                "Crear ticket"
+            )
+
             .setEmoji("🎫")
-            .setStyle(ButtonStyle.Success);
+
+            .setStyle(
+                ButtonStyle.Success
+            );
 
     const fila =
         new ActionRowBuilder()
             .addComponents(boton);
 
     return {
+
         embeds: [embed],
+
         components: [fila]
+
     };
+
 }
 
 // =====================================================
-// MENSAJE TICKET
+// MENSAJE DEL TICKET
 // =====================================================
 
 function crearMensajeTicket(member) {
+
     const embed =
         new EmbedBuilder()
+
             .setColor(0x8E44AD)
-            .setTitle("🎫 TICKET DE SOPORTE")
+
+            .setTitle(
+                "🎫 TICKET DE SOPORTE"
+            )
+
             .setDescription(
                 `Hola ${member} 💜\n\n` +
                 "Tu ticket fue creado correctamente.\n\n" +
                 "📌 Explicá detalladamente el motivo de tu consulta.\n\n" +
-                "🛡️ Un miembro del Staff, Moderación u Owner " +
-                "atenderá tu ticket.\n\n" +
+                "🛡️ Un miembro del equipo atenderá tu ticket.\n\n" +
                 "🚫 No hagas spam ni menciones repetidamente al equipo.\n\n" +
-                "Cuando el problema esté solucionado, podés " +
-                "utilizar **🔒 Cerrar ticket**."
+                "Cuando el problema esté solucionado, el Staff puede cerrar el ticket."
             )
+
             .setFooter({
-                text: "La Orden Morada • Soporte"
+                text:
+                    "Sistema de soporte"
             })
+
             .setTimestamp();
 
     const cerrar =
         new ButtonBuilder()
-            .setCustomId("cerrar_ticket")
-            .setLabel("Cerrar ticket")
+
+            .setCustomId(
+                "cerrar_ticket"
+            )
+
+            .setLabel(
+                "Cerrar ticket"
+            )
+
             .setEmoji("🔒")
-            .setStyle(ButtonStyle.Danger);
+
+            .setStyle(
+                ButtonStyle.Danger
+            );
 
     const fila =
         new ActionRowBuilder()
             .addComponents(cerrar);
 
     return {
-        content: `${member}`,
-        embeds: [embed],
-        components: [fila]
+
+        content:
+            `${member}`,
+
+        embeds:
+            [embed],
+
+        components:
+            [fila]
+
     };
+
 }
 
 // =====================================================
-// ASEGURAR PANEL VERIFICACIÓN
+// ASEGURAR PANEL DE VERIFICACIÓN
 // =====================================================
 
 async function asegurarPanelVerificacion() {
-    try {
-        for (const [, guild] of client.guilds.cache) {
+
+    for (
+        const [, guild]
+        of client.guilds.cache
+    ) {
+
+        try {
+
+            const config =
+                getConfig(guild);
+
+            if (!config) {
+                continue;
+            }
+
             const canal =
                 await guild.channels.fetch(
-                    VERIFY_CHANNEL_ID
+                    config.canales.verify
                 );
 
-            if (!canal || !canal.isTextBased()) {
+            if (
+                !canal ||
+                !canal.isTextBased()
+            ) {
                 continue;
             }
 
@@ -409,53 +647,82 @@ async function asegurarPanelVerificacion() {
                 });
 
             const existe =
-                mensajes.find(message => {
-                    if (
-                        message.author?.id !==
-                        client.user.id
-                    ) {
-                        return false;
-                    }
+                mensajes.find(
+                    message => {
 
-                    return message.components?.some(row =>
-                        row.components?.some(component =>
-                            component.customId ===
-                            "verificar_usuario"
-                        )
-                    );
-                });
+                        if (
+                            message.author?.id !==
+                            client.user.id
+                        ) {
+                            return false;
+                        }
+
+                        return message.components?.some(
+                            row =>
+                                row.components?.some(
+                                    component =>
+                                        component.customId ===
+                                        "verificar_usuario"
+                                )
+                        );
+
+                    }
+                );
 
             if (!existe) {
+
                 await canal.send(
                     crearPanelVerificacion()
                 );
 
                 console.log(
-                    `✅ Panel de verificación enviado en ${guild.name}.`
+                    `✅ Panel de verificación creado en ${guild.name}`
                 );
+
             }
+
+        } catch (error) {
+
+            console.error(
+                `❌ Error panel verificación:`,
+                error.message || error
+            );
+
         }
-    } catch (error) {
-        console.error(
-            "❌ ERROR PANEL VERIFICACIÓN:",
-            error.message || error
-        );
+
     }
+
 }
 
 // =====================================================
-// ASEGURAR PANEL TICKETS
+// ASEGURAR PANEL DE TICKETS
 // =====================================================
 
 async function asegurarPanelTickets() {
-    try {
-        for (const [, guild] of client.guilds.cache) {
+
+    for (
+        const [, guild]
+        of client.guilds.cache
+    ) {
+
+        try {
+
+            const config =
+                getConfig(guild);
+
+            if (!config) {
+                continue;
+            }
+
             const canal =
                 await guild.channels.fetch(
-                    TICKET_PANEL_CHANNEL_ID
+                    config.canales.tickets
                 );
 
-            if (!canal || !canal.isTextBased()) {
+            if (
+                !canal ||
+                !canal.isTextBased()
+            ) {
                 continue;
             }
 
@@ -465,38 +732,51 @@ async function asegurarPanelTickets() {
                 });
 
             const existe =
-                mensajes.find(message => {
-                    if (
-                        message.author?.id !==
-                        client.user.id
-                    ) {
-                        return false;
-                    }
+                mensajes.find(
+                    message => {
 
-                    return message.components?.some(row =>
-                        row.components?.some(component =>
-                            component.customId ===
-                            "crear_ticket"
-                        )
-                    );
-                });
+                        if (
+                            message.author?.id !==
+                            client.user.id
+                        ) {
+                            return false;
+                        }
+
+                        return message.components?.some(
+                            row =>
+                                row.components?.some(
+                                    component =>
+                                        component.customId ===
+                                        "crear_ticket"
+                                )
+                        );
+
+                    }
+                );
 
             if (!existe) {
+
                 await canal.send(
                     crearPanelTickets()
                 );
 
                 console.log(
-                    `✅ Panel de tickets enviado en ${guild.name}.`
+                    `✅ Panel de tickets creado en ${guild.name}`
                 );
+
             }
+
+        } catch (error) {
+
+            console.error(
+                `❌ Error panel tickets:`,
+                error.message || error
+            );
+
         }
-    } catch (error) {
-        console.error(
-            "❌ ERROR PANEL TICKETS:",
-            error.message || error
-        );
+
     }
+
 }
 
 // =====================================================
@@ -513,97 +793,115 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("ban")
-        .setDescription("Banea a un usuario.")
+        .setDescription(
+            "Banea a un usuario."
+        )
         .addUserOption(option =>
             option
                 .setName("usuario")
-                .setDescription("Usuario que quieres banear")
+                .setDescription(
+                    "Usuario que quieres banear"
+                )
                 .setRequired(true)
-        )
-        .setDefaultMemberPermissions(
-            PermissionFlagsBits.BanMembers
         ),
 
     new SlashCommandBuilder()
         .setName("mute")
-        .setDescription("Silencia temporalmente a un usuario.")
+        .setDescription(
+            "Silencia temporalmente a un usuario."
+        )
         .addUserOption(option =>
             option
                 .setName("usuario")
-                .setDescription("Usuario que quieres silenciar")
+                .setDescription(
+                    "Usuario que quieres silenciar"
+                )
                 .setRequired(true)
         )
         .addStringOption(option =>
             option
                 .setName("duracion")
-                .setDescription("Ej: 30s, 5m, 1h, 1d")
+                .setDescription(
+                    "Ej: 30s, 5m, 1h, 1d"
+                )
                 .setRequired(true)
-        )
-        .setDefaultMemberPermissions(
-            PermissionFlagsBits.ModerateMembers
         ),
 
     new SlashCommandBuilder()
         .setName("unmute")
-        .setDescription("Quita el mute a un usuario.")
+        .setDescription(
+            "Quita el mute a un usuario."
+        )
         .addUserOption(option =>
             option
                 .setName("usuario")
-                .setDescription("Usuario al que quitar el mute")
+                .setDescription(
+                    "Usuario al que quitar el mute"
+                )
                 .setRequired(true)
-        )
-        .setDefaultMemberPermissions(
-            PermissionFlagsBits.ModerateMembers
         ),
 
     new SlashCommandBuilder()
         .setName("unban")
-        .setDescription("Desbanea a un usuario.")
+        .setDescription(
+            "Desbanea a un usuario."
+        )
         .addStringOption(option =>
             option
                 .setName("id")
-                .setDescription("ID del usuario")
+                .setDescription(
+                    "ID del usuario"
+                )
                 .setRequired(true)
-        )
-        .setDefaultMemberPermissions(
-            PermissionFlagsBits.BanMembers
         ),
 
     new SlashCommandBuilder()
         .setName("warn")
-        .setDescription("Advierte a un usuario.")
+        .setDescription(
+            "Advierte a un usuario."
+        )
         .addUserOption(option =>
             option
                 .setName("usuario")
-                .setDescription("Usuario a advertir")
+                .setDescription(
+                    "Usuario a advertir"
+                )
                 .setRequired(true)
         )
         .addStringOption(option =>
             option
                 .setName("motivo")
-                .setDescription("Motivo de la advertencia")
+                .setDescription(
+                    "Motivo"
+                )
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("warnings")
         .setDescription(
-            "Muestra las advertencias de un usuario."
+            "Muestra las advertencias."
         )
         .addUserOption(option =>
             option
                 .setName("usuario")
-                .setDescription("Usuario")
+                .setDescription(
+                    "Usuario"
+                )
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("clear")
-        .setDescription("Elimina mensajes de un canal.")
+        .setDescription(
+            "Elimina mensajes."
+        )
         .addIntegerOption(option =>
             option
                 .setName("cantidad")
-                .setDescription("Cantidad de mensajes a eliminar")
+                .setDescription(
+                    "Cantidad"
+                )
                 .setMinValue(1)
                 .setMaxValue(100)
                 .setRequired(true)
@@ -611,53 +909,75 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("slowmode")
-        .setDescription("Configura el modo lento.")
+        .setDescription(
+            "Configura el modo lento."
+        )
         .addStringOption(option =>
             option
                 .setName("tiempo")
-                .setDescription("Ej: 5s, 10s, 1m, 5m")
+                .setDescription(
+                    "Ej: 5s, 10s, 1m"
+                )
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("lock")
-        .setDescription("Bloquea un canal o todo el servidor.")
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName("canal")
-                .setDescription("Bloquea este canal.")
+        .setDescription(
+            "Bloquea canales."
         )
-        .addSubcommand(subcommand =>
-            subcommand
+        .addSubcommand(sub =>
+            sub
+                .setName("canal")
+                .setDescription(
+                    "Bloquea este canal."
+                )
+        )
+        .addSubcommand(sub =>
+            sub
                 .setName("general")
-                .setDescription("Bloquea todos los canales.")
+                .setDescription(
+                    "Bloquea todos los canales."
+                )
         ),
 
     new SlashCommandBuilder()
         .setName("unlock")
-        .setDescription("Desbloquea un canal o todo el servidor.")
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName("canal")
-                .setDescription("Desbloquea este canal.")
+        .setDescription(
+            "Desbloquea canales."
         )
-        .addSubcommand(subcommand =>
-            subcommand
+        .addSubcommand(sub =>
+            sub
+                .setName("canal")
+                .setDescription(
+                    "Desbloquea este canal."
+                )
+        )
+        .addSubcommand(sub =>
+            sub
                 .setName("general")
-                .setDescription("Desbloquea todos los canales.")
+                .setDescription(
+                    "Desbloquea todos los canales."
+                )
         ),
 
     new SlashCommandBuilder()
         .setName("create")
-        .setDescription("Crea un mensaje personalizado.")
-        .addSubcommand(subcommand =>
-            subcommand
+        .setDescription(
+            "Crea un mensaje personalizado."
+        )
+        .addSubcommand(sub =>
+            sub
                 .setName("msj")
-                .setDescription("Crea un mensaje en formato embed.")
+                .setDescription(
+                    "Crea un embed."
+                )
                 .addStringOption(option =>
                     option
                         .setName("texto")
-                        .setDescription("Texto del mensaje.")
+                        .setDescription(
+                            "Texto"
+                        )
                         .setRequired(true)
                 )
         )
@@ -674,31 +994,35 @@ const rest =
     }).setToken(TOKEN);
 
 async function registrarComandos() {
-    try {
-        console.log("🔄 Registrando comandos slash...");
 
-        /*
-         * Se registran GLOBALMENTE.
-         * Discord puede tardar en actualizar comandos globales.
-         */
+    try {
+
+        console.log(
+            "🔄 Registrando comandos..."
+        );
 
         await rest.put(
-            Routes.applicationCommands(CLIENT_ID),
+            Routes.applicationCommands(
+                CLIENT_ID
+            ),
             {
                 body: commands
             }
         );
 
         console.log(
-            `✅ ${commands.length} comandos registrados correctamente.`
+            `✅ ${commands.length} comandos registrados.`
         );
 
     } catch (error) {
+
         console.error(
             "❌ ERROR REGISTRANDO COMANDOS:",
             error.message || error
         );
+
     }
+
 }
 
 // =====================================================
@@ -718,27 +1042,51 @@ client.once(
         );
 
         console.log(
-            `🆔 CLIENT ID: ${client.user.id}`
+            `🆔 BOT ID: ${client.user.id}`
         );
 
         console.log(
             `🏠 SERVIDORES: ${client.guilds.cache.size}`
         );
 
+        for (
+            const [, guild]
+            of client.guilds.cache
+        ) {
+
+            const config =
+                getConfig(guild);
+
+            if (config) {
+
+                console.log(
+                    `✅ Configuración encontrada: ${guild.name} (${guild.id})`
+                );
+
+            } else {
+
+                console.log(
+                    `⚠️ Servidor no configurado: ${guild.name} (${guild.id})`
+                );
+
+            }
+
+        }
+
         console.log(
             "🛡️ Anti-spam: ACTIVADO"
         );
 
         console.log(
-            "🔗 Bloqueo de invitaciones: ACTIVADO"
+            "🔗 Anti-invitaciones: ACTIVADO"
         );
 
         console.log(
-            "🎫 Sistema de tickets: ACTIVADO"
+            "🎫 Tickets: ACTIVADO"
         );
 
         console.log(
-            "🛡️ Sistema de verificación: ACTIVADO"
+            "🛡️ Verificación: ACTIVADA"
         );
 
         console.log(
@@ -747,11 +1095,14 @@ client.once(
 
         setTimeout(
             async () => {
+
                 await asegurarPanelVerificacion();
                 await asegurarPanelTickets();
+
             },
             2000
         );
+
     }
 );
 
@@ -768,6 +1119,11 @@ client.on(
             if (!message.guild) return;
             if (message.author?.bot) return;
 
+            const config =
+                getConfig(message.guild);
+
+            if (!config) return;
+
             guardarMensaje(message);
 
             const miembro =
@@ -776,24 +1132,47 @@ client.on(
             const protegido =
                 miembro &&
                 (
-                    miembro.roles.cache.has(OWNER_ROLE_ID) ||
-                    miembro.roles.cache.has(STAFF_ROLE_ID) ||
-                    miembro.roles.cache.has(MOD_ROLE_ID) ||
+                    tieneRol(
+                        miembro,
+                        config.roles.owner
+                    ) ||
+                    tieneRol(
+                        miembro,
+                        config.roles.coowner
+                    ) ||
+                    tieneRol(
+                        miembro,
+                        config.roles.admin
+                    ) ||
+                    tieneRol(
+                        miembro,
+                        config.roles.adminJunior
+                    ) ||
+                    tieneRol(
+                        miembro,
+                        config.roles.staff
+                    ) ||
+                    tieneRol(
+                        miembro,
+                        config.roles.mod
+                    ) ||
                     miembro.permissions.has(
                         PermissionFlagsBits.Administrator
                     )
                 );
 
-            // =================================================
-            // INVITACIONES DISCORD
-            // =================================================
+            // =============================================
+            // INVITACIONES
+            // =============================================
 
-            const invitacionDiscord =
+            const invitacion =
                 /(discord\.gg\/|discord\.com\/invite\/|discordapp\.com\/invite\/)/i
-                    .test(message.content || "");
+                    .test(
+                        message.content || ""
+                    );
 
             if (
-                invitacionDiscord &&
+                invitacion &&
                 !protegido
             ) {
 
@@ -803,25 +1182,32 @@ client.on(
 
                 const aviso =
                     await message.channel.send({
+
                         content:
-                            `🚫 ${message.author}, no está permitido enviar invitaciones de otros servidores de Discord.`
+                            `🚫 ${message.author}, no está permitido enviar invitaciones de otros servidores.`
+
                     });
 
                 setTimeout(
                     async () => {
+
                         try {
                             await aviso.delete();
                         } catch {}
+
                     },
                     5000
                 );
 
                 const embed =
                     new EmbedBuilder()
+
                         .setColor(0xED4245)
+
                         .setTitle(
-                            "🔗 INVITACIÓN DE DISCORD BLOQUEADA"
+                            "🔗 INVITACIÓN BLOQUEADA"
                         )
+
                         .addFields(
                             {
                                 name: "👤 Usuario",
@@ -832,13 +1218,9 @@ client.on(
                                 name: "📍 Canal",
                                 value:
                                     `${message.channel}`
-                            },
-                            {
-                                name: "🔗 Contenido",
-                                value:
-                                    "Invitación de Discord detectada."
                             }
                         )
+
                         .setTimestamp();
 
                 await enviarLog(
@@ -849,9 +1231,9 @@ client.on(
                 return;
             }
 
-            // =================================================
+            // =============================================
             // ANTI-SPAM
-            // =================================================
+            // =============================================
 
             if (protegido) {
                 return;
@@ -869,23 +1251,29 @@ client.on(
             if (!datos) {
 
                 datos = {
+
                     mensajes: [],
                     castigado: false
+
                 };
 
                 spamTracker.set(
                     clave,
                     datos
                 );
+
             }
 
             datos.mensajes =
                 datos.mensajes.filter(
                     timestamp =>
-                        ahora - timestamp <= SPAM_WINDOW
+                        ahora - timestamp <=
+                        SPAM_WINDOW
                 );
 
-            datos.mensajes.push(ahora);
+            datos.mensajes.push(
+                ahora
+            );
 
             if (
                 datos.mensajes.length >=
@@ -902,29 +1290,26 @@ client.on(
                             limit: 20
                         });
 
-                    const mensajesSpam =
-                        mensajes.filter(msg =>
-                            msg.author.id ===
-                            message.author.id &&
-                            ahora - msg.createdTimestamp <=
-                            SPAM_WINDOW
+                    const spam =
+                        mensajes.filter(
+                            msg =>
+                                msg.author.id ===
+                                message.author.id &&
+                                ahora -
+                                msg.createdTimestamp <=
+                                SPAM_WINDOW
                         );
 
-                    if (mensajesSpam.size > 0) {
+                    if (spam.size > 0) {
 
                         await message.channel.bulkDelete(
-                            mensajesSpam,
+                            spam,
                             true
                         );
+
                     }
 
-                } catch (error) {
-
-                    console.error(
-                        "❌ No se pudieron eliminar mensajes de spam:",
-                        error.message || error
-                    );
-                }
+                } catch {}
 
                 try {
 
@@ -933,23 +1318,21 @@ client.on(
                         "Anti-spam automático"
                     );
 
-                } catch (error) {
-
-                    console.error(
-                        "❌ No se pudo aplicar timeout anti-spam:",
-                        error.message || error
-                    );
-                }
+                } catch {}
 
                 const embed =
                     new EmbedBuilder()
+
                         .setColor(0xED4245)
+
                         .setTitle(
-                            "🛡️ ANTI-SPAM ACTIVADO"
+                            "🛡️ ANTI-SPAM"
                         )
+
                         .setDescription(
-                            `${message.author} fue detectado enviando demasiados mensajes en poco tiempo.`
+                            `${message.author} fue detectado haciendo spam.`
                         )
+
                         .addFields(
                             {
                                 name: "👤 Usuario",
@@ -964,18 +1347,10 @@ client.on(
                             {
                                 name: "🔇 Acción",
                                 value:
-                                    "Timeout automático de 30 segundos"
-                            },
-                            {
-                                name: "📍 Canal",
-                                value:
-                                    `${message.channel}`
+                                    "Timeout de 30 segundos"
                             }
                         )
-                        .setFooter({
-                            text:
-                                "La Orden Morada • Anti-Spam"
-                        })
+
                         .setTimestamp();
 
                 await enviarLog(
@@ -985,25 +1360,32 @@ client.on(
 
                 const aviso =
                     await message.channel.send({
+
                         content:
                             `🛡️ ${message.author} fue silenciado durante 30 segundos por spam.`
+
                     });
 
                 setTimeout(
                     async () => {
+
                         try {
                             await aviso.delete();
                         } catch {}
+
                     },
                     5000
                 );
 
                 setTimeout(
                     () => {
-                        spamTracker.delete(clave);
+                        spamTracker.delete(
+                            clave
+                        );
                     },
                     SPAM_WINDOW
                 );
+
             }
 
         } catch (error) {
@@ -1012,7 +1394,9 @@ client.on(
                 "❌ ERROR MESSAGE CREATE:",
                 error.message || error
             );
+
         }
+
     }
 );
 
@@ -1029,8 +1413,15 @@ client.on(
             if (!message.guild) return;
             if (message.author?.bot) return;
 
+            const config =
+                getConfig(message.guild);
+
+            if (!config) return;
+
             const guardado =
-                messageCache.get(message.id);
+                messageCache.get(
+                    message.id
+                );
 
             let texto =
                 message.content ||
@@ -1038,8 +1429,11 @@ client.on(
                 "Contenido no disponible.";
 
             if (texto.length > 1000) {
+
                 texto =
-                    texto.substring(0, 997) + "...";
+                    texto.substring(0, 997) +
+                    "...";
+
             }
 
             const autor =
@@ -1054,8 +1448,13 @@ client.on(
 
             const embed =
                 new EmbedBuilder()
+
                     .setColor(0xED4245)
-                    .setTitle("🗑️ MENSAJE ELIMINADO")
+
+                    .setTitle(
+                        "🗑️ MENSAJE ELIMINADO"
+                    )
+
                     .addFields(
                         {
                             name: "👤 Usuario",
@@ -1077,15 +1476,18 @@ client.on(
                                 `\`\`\`\n${texto}\n\`\`\``
                         }
                     )
+
                     .setTimestamp();
 
             if (autor) {
+
                 embed.setThumbnail(
                     autor.displayAvatarURL({
                         extension: "png",
                         size: 256
                     })
                 );
+
             }
 
             await enviarLog(
@@ -1103,7 +1505,9 @@ client.on(
                 "❌ ERROR MESSAGE DELETE:",
                 error.message || error
             );
+
         }
+
     }
 );
 
@@ -1120,8 +1524,15 @@ client.on(
             if (!oldMessage.guild) return;
             if (oldMessage.author?.bot) return;
 
+            const config =
+                getConfig(oldMessage.guild);
+
+            if (!config) return;
+
             const guardado =
-                messageCache.get(oldMessage.id);
+                messageCache.get(
+                    oldMessage.id
+                );
 
             const antes =
                 oldMessage.content ||
@@ -1143,19 +1554,34 @@ client.on(
                 despues || "Sin contenido";
 
             if (textoAntes.length > 900) {
+
                 textoAntes =
-                    textoAntes.substring(0, 897) + "...";
+                    textoAntes.substring(
+                        0,
+                        897
+                    ) + "...";
+
             }
 
             if (textoDespues.length > 900) {
+
                 textoDespues =
-                    textoDespues.substring(0, 897) + "...";
+                    textoDespues.substring(
+                        0,
+                        897
+                    ) + "...";
+
             }
 
             const embed =
                 new EmbedBuilder()
+
                     .setColor(0xF1C40F)
-                    .setTitle("✏️ MENSAJE EDITADO")
+
+                    .setTitle(
+                        "✏️ MENSAJE EDITADO"
+                    )
+
                     .addFields(
                         {
                             name: "👤 Usuario",
@@ -1180,24 +1606,17 @@ client.on(
                                 `\`\`\`\n${textoDespues}\n\`\`\``
                         }
                     )
+
                     .setTimestamp();
-
-            if (oldMessage.author) {
-
-                embed.setThumbnail(
-                    oldMessage.author.displayAvatarURL({
-                        extension: "png",
-                        size: 256
-                    })
-                );
-            }
 
             await enviarLog(
                 oldMessage.guild,
                 embed
             );
 
-            guardarMensaje(newMessage);
+            guardarMensaje(
+                newMessage
+            );
 
         } catch (error) {
 
@@ -1205,12 +1624,14 @@ client.on(
                 "❌ ERROR MESSAGE UPDATE:",
                 error.message || error
             );
+
         }
+
     }
 );
 
 // =====================================================
-// BIENVENIDA
+// BIENVENIDAS
 // =====================================================
 
 client.on(
@@ -1219,12 +1640,20 @@ client.on(
 
         try {
 
+            const config =
+                getConfig(member.guild);
+
+            if (!config) return;
+
             const canal =
                 await member.guild.channels.fetch(
-                    WELCOME_CHANNEL_ID
+                    config.canales.welcome
                 );
 
-            if (!canal || !canal.isTextBased()) {
+            if (
+                !canal ||
+                !canal.isTextBased()
+            ) {
                 return;
             }
 
@@ -1236,25 +1665,37 @@ client.on(
 
             const embed =
                 new EmbedBuilder()
+
                     .setColor(0x8E44AD)
+
                     .setTitle(
-                        "🫶︱𝗕𝗜𝗘𝗡𝗩𝗘𝗡𝗜𝗗𝗢𝗦"
+                        "🫶︱BIENVENIDO/A"
                     )
+
                     .setDescription(
-                        `💜 **¡Bienvenido/a ${member} a La Orden Morada!**\n\n` +
-                        "🫶 Esperamos que disfrutes del servidor."
+                        `💜 **¡Bienvenido/a ${member}!**\n\n` +
+                        "Esperamos que disfrutes del servidor."
                     )
-                    .setThumbnail(avatar)
-                    .setImage(avatar)
+
+                    .setThumbnail(
+                        avatar
+                    )
+
                     .setFooter({
-                        text: "La Orden Morada"
+                        text:
+                            "Sistema de bienvenida"
                     })
+
                     .setTimestamp();
 
             await canal.send({
+
                 content:
                     `🎉 ¡Bienvenido/a ${member}!`,
-                embeds: [embed]
+
+                embeds:
+                    [embed]
+
             });
 
         } catch (error) {
@@ -1263,7 +1704,9 @@ client.on(
                 "❌ ERROR BIENVENIDA:",
                 error.message || error
             );
+
         }
+
     }
 );
 
@@ -1277,8 +1720,38 @@ client.on(
 
         try {
 
+            if (!interaction.guild) {
+                return;
+            }
+
+            const config =
+                getConfig(
+                    interaction.guild
+                );
+
+            if (!config) {
+
+                if (
+                    interaction.isChatInputCommand()
+                ) {
+
+                    return interaction.reply({
+
+                        content:
+                            "❌ Este servidor no está configurado para este bot.",
+
+                        ephemeral: true
+
+                    });
+
+                }
+
+                return;
+
+            }
+
             // =================================================
-            // VERIFICACIÓN
+            // VERIFICAR
             // =================================================
 
             if (
@@ -1292,29 +1765,37 @@ client.on(
 
                 const rol =
                     await interaction.guild.roles.fetch(
-                        VERIFY_ROLE_ID
+                        config.roles.verify
                     );
 
                 if (!rol) {
 
                     return interaction.reply({
+
                         content:
                             "❌ No encontré el rol de verificado.",
+
                         ephemeral: true
+
                     });
+
                 }
 
                 if (
                     miembro.roles.cache.has(
-                        VERIFY_ROLE_ID
+                        config.roles.verify
                     )
                 ) {
 
                     return interaction.reply({
+
                         content:
                             "✅ Ya estás verificado/a.",
+
                         ephemeral: true
+
                     });
+
                 }
 
                 const bot =
@@ -1327,10 +1808,14 @@ client.on(
                 ) {
 
                     return interaction.reply({
+
                         content:
                             "❌ El rol de verificado debe estar debajo del rol más alto del bot.",
+
                         ephemeral: true
+
                     });
+
                 }
 
                 await miembro.roles.add(
@@ -1339,15 +1824,23 @@ client.on(
                 );
 
                 await interaction.reply({
+
                     content:
                         `✅ ¡Listo! Ya estás verificado/a y recibiste ${rol}.`,
+
                     ephemeral: true
+
                 });
 
                 const embed =
                     new EmbedBuilder()
+
                         .setColor(0x57F287)
-                        .setTitle("🛡️ USUARIO VERIFICADO")
+
+                        .setTitle(
+                            "🛡️ USUARIO VERIFICADO"
+                        )
+
                         .addFields(
                             {
                                 name: "👤 Usuario",
@@ -1360,6 +1853,7 @@ client.on(
                                     interaction.user.id
                             }
                         )
+
                         .setTimestamp();
 
                 await enviarLog(
@@ -1368,6 +1862,7 @@ client.on(
                 );
 
                 return;
+
             }
 
             // =================================================
@@ -1389,7 +1884,7 @@ client.on(
 
                 const categoria =
                     await guild.channels.fetch(
-                        TICKET_CATEGORY_ID
+                        config.categoriaTickets
                     );
 
                 if (
@@ -1399,16 +1894,19 @@ client.on(
                 ) {
 
                     return interaction.editReply({
+
                         content:
                             "❌ La categoría de tickets no existe."
+
                     });
+
                 }
 
                 const existente =
                     guild.channels.cache.find(
                         canal =>
                             canal.parentId ===
-                            TICKET_CATEGORY_ID &&
+                            config.categoriaTickets &&
                             canal.topic ===
                             `ticket:${interaction.user.id}`
                     );
@@ -1416,91 +1914,114 @@ client.on(
                 if (existente) {
 
                     return interaction.editReply({
+
                         content:
                             `🎫 Ya tenés un ticket abierto: ${existente}`
+
                     });
+
                 }
 
                 const nombre =
                     `ticket-${interaction.user.username}`
                         .toLowerCase()
-                        .replace(/[^a-z0-9-]/g, "")
-                        .substring(0, 80);
+                        .replace(
+                            /[^a-z0-9-]/g,
+                            ""
+                        )
+                        .substring(
+                            0,
+                            80
+                        );
+
+                const overwrites = [
+
+                    {
+                        id:
+                            guild.roles.everyone.id,
+
+                        deny: [
+                            PermissionFlagsBits.ViewChannel
+                        ]
+                    },
+
+                    {
+                        id:
+                            interaction.user.id,
+
+                        allow: [
+                            PermissionFlagsBits.ViewChannel,
+                            PermissionFlagsBits.SendMessages,
+                            PermissionFlagsBits.ReadMessageHistory,
+                            PermissionFlagsBits.AttachFiles
+                        ]
+                    }
+
+                ];
+
+                // =============================================
+                // AGREGAR ROLES DEL EQUIPO
+                // =============================================
+
+                const rolesStaff = [
+
+                    config.roles.owner,
+                    config.roles.coowner,
+                    config.roles.admin,
+                    config.roles.adminJunior,
+                    config.roles.staff,
+                    config.roles.mod
+
+                ].filter(Boolean);
+
+                for (
+                    const roleId
+                    of rolesStaff
+                ) {
+
+                    if (
+                        overwrites.some(
+                            x => x.id === roleId
+                        )
+                    ) {
+                        continue;
+                    }
+
+                    overwrites.push({
+
+                        id:
+                            roleId,
+
+                        allow: [
+                            PermissionFlagsBits.ViewChannel,
+                            PermissionFlagsBits.SendMessages,
+                            PermissionFlagsBits.ReadMessageHistory,
+                            PermissionFlagsBits.ManageMessages
+                        ]
+
+                    });
+
+                }
 
                 const canal =
                     await guild.channels.create({
 
                         name:
-                            nombre || `ticket-${interaction.user.id}`,
+                            nombre ||
+                            `ticket-${interaction.user.id}`,
 
                         type:
                             ChannelType.GuildText,
 
                         parent:
-                            TICKET_CATEGORY_ID,
+                            config.categoriaTickets,
 
                         topic:
                             `ticket:${interaction.user.id}`,
 
-                        permissionOverwrites: [
+                        permissionOverwrites:
+                            overwrites
 
-                            {
-                                id:
-                                    guild.roles.everyone.id,
-
-                                deny: [
-                                    PermissionFlagsBits.ViewChannel
-                                ]
-                            },
-
-                            {
-                                id:
-                                    interaction.user.id,
-
-                                allow: [
-                                    PermissionFlagsBits.ViewChannel,
-                                    PermissionFlagsBits.SendMessages,
-                                    PermissionFlagsBits.ReadMessageHistory,
-                                    PermissionFlagsBits.AttachFiles
-                                ]
-                            },
-
-                            {
-                                id:
-                                    STAFF_ROLE_ID,
-
-                                allow: [
-                                    PermissionFlagsBits.ViewChannel,
-                                    PermissionFlagsBits.SendMessages,
-                                    PermissionFlagsBits.ReadMessageHistory,
-                                    PermissionFlagsBits.ManageMessages
-                                ]
-                            },
-
-                            {
-                                id:
-                                    MOD_ROLE_ID,
-
-                                allow: [
-                                    PermissionFlagsBits.ViewChannel,
-                                    PermissionFlagsBits.SendMessages,
-                                    PermissionFlagsBits.ReadMessageHistory,
-                                    PermissionFlagsBits.ManageMessages
-                                ]
-                            },
-
-                            {
-                                id:
-                                    OWNER_ROLE_ID,
-
-                                allow: [
-                                    PermissionFlagsBits.ViewChannel,
-                                    PermissionFlagsBits.SendMessages,
-                                    PermissionFlagsBits.ReadMessageHistory,
-                                    PermissionFlagsBits.ManageMessages
-                                ]
-                            }
-                        ]
                     });
 
                 await canal.send(
@@ -1510,14 +2031,21 @@ client.on(
                 );
 
                 await interaction.editReply({
+
                     content:
                         `🎫 Tu ticket fue creado correctamente: ${canal}`
+
                 });
 
                 const embed =
                     new EmbedBuilder()
+
                         .setColor(0x57F287)
-                        .setTitle("🎫 TICKET CREADO")
+
+                        .setTitle(
+                            "🎫 TICKET CREADO"
+                        )
+
                         .addFields(
                             {
                                 name: "👤 Usuario",
@@ -1530,6 +2058,7 @@ client.on(
                                     `${canal}`
                             }
                         )
+
                         .setTimestamp();
 
                 await enviarLog(
@@ -1538,6 +2067,7 @@ client.on(
                 );
 
                 return;
+
             }
 
             // =================================================
@@ -1560,42 +2090,63 @@ client.on(
                 ) {
 
                     return interaction.reply({
+
                         content:
                             "❌ Este botón solo funciona dentro de un ticket.",
+
                         ephemeral: true
+
                     });
+
                 }
 
                 if (
                     canal.parentId !==
-                    TICKET_CATEGORY_ID
+                    config.categoriaTickets
                 ) {
 
                     return interaction.reply({
+
                         content:
                             "❌ Este canal no es un ticket.",
+
                         ephemeral: true
+
                     });
+
                 }
 
-                if (!esStaff(interaction)) {
+                if (
+                    !esStaff(interaction)
+                ) {
 
                     return interaction.reply({
+
                         content:
-                            "❌ Solo Staff, Moderadores u Owner pueden cerrar tickets.",
+                            "❌ Solo el equipo puede cerrar tickets.",
+
                         ephemeral: true
+
                     });
+
                 }
 
                 await interaction.reply({
+
                     content:
                         "🔒 Cerrando ticket..."
+
                 });
 
                 const embed =
                     new EmbedBuilder()
+
                         .setColor(0xED4245)
-                        .setTitle("🔒 TICKET CERRADO")
+
+                        .setTitle(
+                            "🔒 TICKET CERRADO"
+                        )
+
                         .addFields(
                             {
                                 name: "📍 Ticket",
@@ -1608,6 +2159,7 @@ client.on(
                                     `${interaction.user}`
                             }
                         )
+
                         .setTimestamp();
 
                 await enviarLog(
@@ -1617,33 +2169,42 @@ client.on(
 
                 setTimeout(
                     async () => {
+
                         try {
+
                             await canal.delete(
                                 "Ticket cerrado"
                             );
+
                         } catch (error) {
+
                             console.error(
-                                "❌ No se pudo eliminar el ticket:",
+                                "❌ Error eliminando ticket:",
                                 error.message || error
                             );
+
                         }
+
                     },
                     3000
                 );
 
                 return;
+
             }
 
             // =================================================
-            // SOLO SLASH COMMANDS
+            // SLASH COMMANDS
             // =================================================
 
-            if (!interaction.isChatInputCommand()) {
+            if (
+                !interaction.isChatInputCommand()
+            ) {
                 return;
             }
 
             // =================================================
-            // /IP
+            // IP
             // =================================================
 
             if (
@@ -1653,13 +2214,17 @@ client.on(
 
                 const embed =
                     new EmbedBuilder()
+
                         .setColor(0x57F287)
+
                         .setTitle(
                             "🎮 SERVIDOR DE MINECRAFT"
                         )
+
                         .setDescription(
-                            "Conectate al servidor usando estos datos:"
+                            "Conectate al servidor:"
                         )
+
                         .addFields(
                             {
                                 name: "🌐 IP",
@@ -1672,19 +2237,17 @@ client.on(
                                     "`19527`"
                             }
                         )
-                        .setFooter({
-                            text:
-                                "La Orden Morada"
-                        })
+
                         .setTimestamp();
 
                 return interaction.reply({
                     embeds: [embed]
                 });
+
             }
 
             // =================================================
-            // /CREATE MSJ
+            // CREATE
             // =================================================
 
             if (
@@ -1692,13 +2255,19 @@ client.on(
                 "create"
             ) {
 
-                if (!esOwner(interaction)) {
+                if (
+                    !esOwner(interaction)
+                ) {
 
                     return interaction.reply({
+
                         content:
-                            "❌ Solo el Owner puede utilizar este comando.",
+                            "❌ Solo Owner puede utilizar este comando.",
+
                         ephemeral: true
+
                     });
+
                 }
 
                 const texto =
@@ -1706,32 +2275,50 @@ client.on(
                         "texto"
                     );
 
-                if (!texto) {
+                if (
+                    !texto
+                ) {
 
                     return interaction.reply({
+
                         content:
                             "❌ Tenés que escribir un texto.",
+
                         ephemeral: true
+
                     });
+
                 }
 
-                if (texto.length > 4096) {
+                if (
+                    texto.length > 4096
+                ) {
 
                     return interaction.reply({
+
                         content:
                             "❌ El texto no puede superar los 4096 caracteres.",
+
                         ephemeral: true
+
                     });
+
                 }
 
                 const embed =
                     new EmbedBuilder()
+
                         .setColor(0x8E44AD)
-                        .setDescription(texto)
+
+                        .setDescription(
+                            texto
+                        )
+
                         .setFooter({
                             text:
-                                "La Orden Morada"
+                                "Sistema de mensajes"
                         })
+
                         .setTimestamp();
 
                 await interaction.channel.send({
@@ -1739,17 +2326,22 @@ client.on(
                 });
 
                 return interaction.reply({
+
                     content:
                         "✅ Mensaje creado correctamente.",
+
                     ephemeral: true
+
                 });
+
             }
 
             // =================================================
-            // COMPROBAR STAFF
+            // COMANDOS STAFF
             // =================================================
 
             const comandosStaff = [
+
                 "ban",
                 "mute",
                 "unmute",
@@ -1760,26 +2352,29 @@ client.on(
                 "slowmode",
                 "lock",
                 "unlock"
+
             ];
 
             if (
                 comandosStaff.includes(
                     interaction.commandName
-                )
+                ) &&
+                !esStaff(interaction)
             ) {
 
-                if (!esStaff(interaction)) {
+                return interaction.reply({
 
-                    return interaction.reply({
-                        content:
-                            "❌ No tenés permisos para utilizar este comando.",
-                        ephemeral: true
-                    });
-                }
+                    content:
+                        "❌ No tenés permisos para utilizar este comando.",
+
+                    ephemeral: true
+
+                });
+
             }
 
             // =================================================
-            // /WARN
+            // WARN
             // =================================================
 
             if (
@@ -1810,37 +2405,56 @@ client.on(
                 ) {
 
                     return interaction.reply({
+
                         content:
                             "❌ No podés moderar a un usuario con un rol igual o superior al tuyo.",
+
                         ephemeral: true
+
                     });
+
                 }
 
                 const clave =
                     `${interaction.guild.id}:${usuario.id}`;
 
-                if (!warnings.has(clave)) {
-                    warnings.set(clave, []);
+                if (
+                    !warnings.has(clave)
+                ) {
+                    warnings.set(
+                        clave,
+                        []
+                    );
                 }
 
                 const lista =
                     warnings.get(clave);
 
                 lista.push({
+
                     motivo,
+
                     moderador:
                         interaction.user.id,
+
                     fecha:
                         Date.now()
+
                 });
 
                 const embed =
                     new EmbedBuilder()
+
                         .setColor(0xF1C40F)
-                        .setTitle("⚠️ ADVERTENCIA")
+
+                        .setTitle(
+                            "⚠️ ADVERTENCIA"
+                        )
+
                         .setDescription(
                             `${usuario} recibió una advertencia.`
                         )
+
                         .addFields(
                             {
                                 name: "👤 Usuario",
@@ -1863,6 +2477,7 @@ client.on(
                                     `${interaction.user}`
                             }
                         )
+
                         .setTimestamp();
 
                 await interaction.reply({
@@ -1875,10 +2490,11 @@ client.on(
                 );
 
                 return;
+
             }
 
             // =================================================
-            // /WARNINGS
+            // WARNINGS
             // =================================================
 
             if (
@@ -1897,13 +2513,19 @@ client.on(
                 const lista =
                     warnings.get(clave) || [];
 
-                if (lista.length === 0) {
+                if (
+                    lista.length === 0
+                ) {
 
                     return interaction.reply({
+
                         content:
                             `📋 ${usuario} no tiene advertencias.`,
+
                         ephemeral: true
+
                     });
+
                 }
 
                 const texto =
@@ -1916,23 +2538,33 @@ client.on(
 
                 const embed =
                     new EmbedBuilder()
+
                         .setColor(0xF1C40F)
+
                         .setTitle(
                             "📋 HISTORIAL DE ADVERTENCIAS"
                         )
+
                         .setDescription(
                             `**Usuario:** ${usuario}\n\n${texto}`
                         )
+
                         .setTimestamp();
 
                 return interaction.reply({
-                    embeds: [embed],
-                    ephemeral: true
+
+                    embeds:
+                        [embed],
+
+                    ephemeral:
+                        true
+
                 });
+
             }
 
             // =================================================
-            // /CLEAR
+            // CLEAR
             // =================================================
 
             if (
@@ -1951,10 +2583,14 @@ client.on(
                 ) {
 
                     return interaction.reply({
+
                         content:
                             "❌ Este comando no puede utilizarse aquí.",
+
                         ephemeral: true
+
                     });
+
                 }
 
                 await interaction.deferReply({
@@ -1969,8 +2605,13 @@ client.on(
 
                 const embed =
                     new EmbedBuilder()
+
                         .setColor(0x57F287)
-                        .setTitle("🧹 MENSAJES ELIMINADOS")
+
+                        .setTitle(
+                            "🧹 MENSAJES ELIMINADOS"
+                        )
+
                         .addFields(
                             {
                                 name: "📊 Cantidad",
@@ -1988,6 +2629,7 @@ client.on(
                                     `${interaction.channel}`
                             }
                         )
+
                         .setTimestamp();
 
                 await interaction.editReply({
@@ -2000,10 +2642,11 @@ client.on(
                 );
 
                 return;
+
             }
 
             // =================================================
-            // /SLOWMODE
+            // SLOWMODE
             // =================================================
 
             if (
@@ -2016,33 +2659,45 @@ client.on(
                         "tiempo"
                     );
 
-                const segundos =
-                    convertirDuracion(entrada);
-
-                if (segundos === null) {
-
-                    return interaction.reply({
-                        content:
-                            "❌ Usa `5s`, `10s`, `1m`, `5m` o `1h`.",
-                        ephemeral: true
-                    });
-                }
-
-                const segundosFinal =
-                    Math.floor(
-                        segundos / 1000
+                const tiempo =
+                    convertirDuracion(
+                        entrada
                     );
 
                 if (
-                    segundosFinal < 0 ||
-                    segundosFinal > 21600
+                    tiempo === null
                 ) {
 
                     return interaction.reply({
+
+                        content:
+                            "❌ Usa `5s`, `10s`, `1m`, `5m` o `1h`.",
+
+                        ephemeral: true
+
+                    });
+
+                }
+
+                const segundos =
+                    Math.floor(
+                        tiempo / 1000
+                    );
+
+                if (
+                    segundos < 0 ||
+                    segundos > 21600
+                ) {
+
+                    return interaction.reply({
+
                         content:
                             "❌ El slowmode debe estar entre 0 y 6 horas.",
+
                         ephemeral: true
+
                     });
+
                 }
 
                 if (
@@ -2052,29 +2707,41 @@ client.on(
                 ) {
 
                     return interaction.reply({
+
                         content:
-                            "❌ Este canal no permite configurar slowmode.",
+                            "❌ Este canal no permite slowmode.",
+
                         ephemeral: true
+
                     });
+
                 }
 
                 await interaction.channel.setRateLimitPerUser(
-                    segundosFinal,
+                    segundos,
                     `Slowmode por ${interaction.user.tag}`
                 );
 
                 const embed =
                     new EmbedBuilder()
+
                         .setColor(0x5865F2)
-                        .setTitle("🐢 SLOWMODE CONFIGURADO")
-                        .setDescription(
-                            `El slowmode de este canal ahora es de **${segundosFinal} segundos**.`
+
+                        .setTitle(
+                            "🐢 SLOWMODE CONFIGURADO"
                         )
+
+                        .setDescription(
+                            `El slowmode ahora es de **${segundos} segundos**.`
+                        )
+
                         .addFields({
-                            name: "🛡️ Configurado por",
+                            name:
+                                "🛡️ Configurado por",
                             value:
                                 `${interaction.user}`
                         })
+
                         .setTimestamp();
 
                 await interaction.reply({
@@ -2087,10 +2754,11 @@ client.on(
                 );
 
                 return;
+
             }
 
             // =================================================
-            // /BAN
+            // BAN
             // =================================================
 
             if (
@@ -2116,26 +2784,36 @@ client.on(
                 ) {
 
                     return interaction.reply({
+
                         content:
                             "❌ No podés banear a un usuario con un rol igual o superior al tuyo.",
+
                         ephemeral: true
+
                     });
+
                 }
 
                 await miembro.ban({
+
                     reason:
-                        `Ban aplicado por ${interaction.user.tag}`
+                        `Ban por ${interaction.user.tag}`
+
                 });
 
                 const embed =
                     new EmbedBuilder()
+
                         .setColor(0xED4245)
+
                         .setTitle(
                             "🔨 USUARIO BANEADO"
                         )
+
                         .setDescription(
-                            `${usuario} fue baneado del servidor.`
+                            `${usuario} fue baneado.`
                         )
+
                         .addFields(
                             {
                                 name: "👤 Usuario",
@@ -2153,6 +2831,7 @@ client.on(
                                     `${interaction.user}`
                             }
                         )
+
                         .setTimestamp();
 
                 await interaction.reply({
@@ -2165,10 +2844,11 @@ client.on(
                 );
 
                 return;
+
             }
 
             // =================================================
-            // /MUTE
+            // MUTE
             // =================================================
 
             if (
@@ -2199,24 +2879,34 @@ client.on(
                 ) {
 
                     return interaction.reply({
+
                         content:
-                            "❌ No podés mutear a un usuario con un rol igual o superior al tuyo.",
+                            "❌ No podés mutear a este usuario.",
+
                         ephemeral: true
+
                     });
+
                 }
 
                 const tiempo =
-                    convertirDuracion(duracion);
+                    convertirDuracion(
+                        duracion
+                    );
 
                 if (
                     tiempo === null
                 ) {
 
                     return interaction.reply({
+
                         content:
                             "❌ Usa `30s`, `5m`, `1h` o `1d`.",
+
                         ephemeral: true
+
                     });
+
                 }
 
                 const maximo =
@@ -2232,26 +2922,34 @@ client.on(
                 ) {
 
                     return interaction.reply({
+
                         content:
                             "❌ La duración debe estar entre 1 segundo y 28 días.",
+
                         ephemeral: true
+
                     });
+
                 }
 
                 await miembro.timeout(
                     tiempo,
-                    `Mute aplicado por ${interaction.user.tag}`
+                    `Mute por ${interaction.user.tag}`
                 );
 
                 const embed =
                     new EmbedBuilder()
+
                         .setColor(0x5865F2)
+
                         .setTitle(
                             "🔇 USUARIO SILENCIADO"
                         )
+
                         .setDescription(
-                            `${usuario} fue silenciado correctamente.`
+                            `${usuario} fue silenciado.`
                         )
+
                         .addFields(
                             {
                                 name: "👤 Usuario",
@@ -2269,6 +2967,7 @@ client.on(
                                     `${interaction.user}`
                             }
                         )
+
                         .setTimestamp();
 
                 await interaction.reply({
@@ -2281,10 +2980,11 @@ client.on(
                 );
 
                 return;
+
             }
 
             // =================================================
-            // /UNMUTE
+            // UNMUTE
             // =================================================
 
             if (
@@ -2310,38 +3010,40 @@ client.on(
                 ) {
 
                     return interaction.reply({
+
                         content:
-                            "❌ No podés modificar a este usuario por su jerarquía.",
+                            "❌ No podés modificar a este usuario.",
+
                         ephemeral: true
+
                     });
+
                 }
 
                 await miembro.timeout(
                     null,
-                    `Mute quitado por ${interaction.user.tag}`
+                    `Unmute por ${interaction.user.tag}`
                 );
 
                 const embed =
                     new EmbedBuilder()
+
                         .setColor(0x57F287)
+
                         .setTitle(
                             "🔊 MUTE REMOVIDO"
                         )
+
                         .setDescription(
-                            `${usuario} ya puede volver a hablar.`
+                            `${usuario} puede volver a hablar.`
                         )
-                        .addFields(
-                            {
-                                name: "👤 Usuario",
-                                value:
-                                    `${usuario}`
-                            },
-                            {
-                                name: "🛡️ Moderador",
-                                value:
-                                    `${interaction.user}`
-                            }
-                        )
+
+                        .addFields({
+                            name: "🛡️ Moderador",
+                            value:
+                                `${interaction.user}`
+                        })
+
                         .setTimestamp();
 
                 await interaction.reply({
@@ -2354,10 +3056,11 @@ client.on(
                 );
 
                 return;
+
             }
 
             // =================================================
-            // /UNBAN
+            // UNBAN
             // =================================================
 
             if (
@@ -2366,33 +3069,39 @@ client.on(
             ) {
 
                 const id =
-                    interaction.options.getString(
-                        "id"
-                    ).trim();
+                    interaction.options
+                        .getString("id")
+                        .trim();
 
-                if (!/^\d{17,20}$/.test(id)) {
+                if (
+                    !/^\d{17,20}$/.test(id)
+                ) {
 
                     return interaction.reply({
+
                         content:
-                            "❌ La ID de Discord no es válida.",
+                            "❌ La ID no es válida.",
+
                         ephemeral: true
+
                     });
+
                 }
 
                 await interaction.guild.members.unban(
                     id,
-                    `Unban realizado por ${interaction.user.tag}`
+                    `Unban por ${interaction.user.tag}`
                 );
 
                 const embed =
                     new EmbedBuilder()
+
                         .setColor(0x57F287)
+
                         .setTitle(
                             "🔓 USUARIO DESBANEADO"
                         )
-                        .setDescription(
-                            `El usuario con ID \`${id}\` fue desbaneado.`
-                        )
+
                         .addFields(
                             {
                                 name: "🆔 ID",
@@ -2405,6 +3114,7 @@ client.on(
                                     `${interaction.user}`
                             }
                         )
+
                         .setTimestamp();
 
                 await interaction.reply({
@@ -2417,10 +3127,11 @@ client.on(
                 );
 
                 return;
+
             }
 
             // =================================================
-            // /LOCK
+            // LOCK
             // =================================================
 
             if (
@@ -2428,14 +3139,13 @@ client.on(
                 "lock"
             ) {
 
-                const subcomando =
+                const sub =
                     interaction.options.getSubcommand();
 
                 await interaction.deferReply();
 
                 if (
-                    subcomando ===
-                    "canal"
+                    sub === "canal"
                 ) {
 
                     const canal =
@@ -2447,36 +3157,50 @@ client.on(
                     ) {
 
                         return interaction.editReply({
+
                             content:
                                 "❌ Este canal no puede bloquearse."
+
                         });
+
                     }
 
                     await canal.permissionOverwrites.edit(
+
                         interaction.guild.roles.everyone,
+
                         {
-                            SendMessages: false
+                            SendMessages:
+                                false
                         },
+
                         {
                             reason:
                                 `Lock por ${interaction.user.tag}`
                         }
+
                     );
 
                     const embed =
                         new EmbedBuilder()
+
                             .setColor(0xED4245)
+
                             .setTitle(
                                 "🔒 CANAL BLOQUEADO"
                             )
+
                             .setDescription(
-                                "🚫 Los usuarios no pueden enviar mensajes en este canal."
+                                "Los usuarios no pueden enviar mensajes en este canal."
                             )
+
                             .addFields({
-                                name: "🛡️ Bloqueado por",
+                                name:
+                                    "🛡️ Bloqueado por",
                                 value:
                                     `${interaction.user}`
                             })
+
                             .setTimestamp();
 
                     await interaction.editReply({
@@ -2489,17 +3213,17 @@ client.on(
                     );
 
                     return;
+
                 }
 
                 if (
-                    subcomando ===
-                    "general"
+                    sub === "general"
                 ) {
 
                     const canales =
                         await interaction.guild.channels.fetch();
 
-                    let bloqueados = 0;
+                    let cantidad = 0;
 
                     for (
                         const [, canal]
@@ -2511,7 +3235,9 @@ client.on(
                             ![
                                 ChannelType.GuildText,
                                 ChannelType.GuildAnnouncement
-                            ].includes(canal.type)
+                            ].includes(
+                                canal.type
+                            )
                         ) {
                             continue;
                         }
@@ -2519,48 +3245,51 @@ client.on(
                         try {
 
                             await canal.permissionOverwrites.edit(
+
                                 interaction.guild.roles.everyone,
+
                                 {
-                                    SendMessages: false
+                                    SendMessages:
+                                        false
                                 },
+
                                 {
                                     reason:
                                         `Lock general por ${interaction.user.tag}`
                                 }
+
                             );
 
-                            bloqueados++;
+                            cantidad++;
 
-                        } catch (error) {
+                        } catch {}
 
-                            console.error(
-                                `❌ No se pudo bloquear #${canal.name}:`,
-                                error.message || error
-                            );
-                        }
                     }
 
                     const embed =
                         new EmbedBuilder()
+
                             .setColor(0xED4245)
+
                             .setTitle(
                                 "🔒 SERVIDOR BLOQUEADO"
                             )
-                            .setDescription(
-                                "🚨 Se realizó un bloqueo general."
-                            )
+
                             .addFields(
                                 {
-                                    name: "📊 Canales bloqueados",
+                                    name:
+                                        "📊 Canales",
                                     value:
-                                        `${bloqueados}`
+                                        `${cantidad}`
                                 },
                                 {
-                                    name: "🛡️ Bloqueado por",
+                                    name:
+                                        "🛡️ Bloqueado por",
                                     value:
                                         `${interaction.user}`
                                 }
                             )
+
                             .setTimestamp();
 
                     await interaction.editReply({
@@ -2573,11 +3302,13 @@ client.on(
                     );
 
                     return;
+
                 }
+
             }
 
             // =================================================
-            // /UNLOCK
+            // UNLOCK
             // =================================================
 
             if (
@@ -2585,14 +3316,13 @@ client.on(
                 "unlock"
             ) {
 
-                const subcomando =
+                const sub =
                     interaction.options.getSubcommand();
 
                 await interaction.deferReply();
 
                 if (
-                    subcomando ===
-                    "canal"
+                    sub === "canal"
                 ) {
 
                     const canal =
@@ -2604,36 +3334,46 @@ client.on(
                     ) {
 
                         return interaction.editReply({
+
                             content:
                                 "❌ Este canal no puede desbloquearse."
+
                         });
+
                     }
 
                     await canal.permissionOverwrites.edit(
+
                         interaction.guild.roles.everyone,
+
                         {
-                            SendMessages: null
+                            SendMessages:
+                                null
                         },
+
                         {
                             reason:
                                 `Unlock por ${interaction.user.tag}`
                         }
+
                     );
 
                     const embed =
                         new EmbedBuilder()
+
                             .setColor(0x57F287)
+
                             .setTitle(
                                 "🔓 CANAL DESBLOQUEADO"
                             )
-                            .setDescription(
-                                "🟢 El canal volvió a utilizar sus permisos normales."
-                            )
+
                             .addFields({
-                                name: "🛡️ Desbloqueado por",
+                                name:
+                                    "🛡️ Desbloqueado por",
                                 value:
                                     `${interaction.user}`
                             })
+
                             .setTimestamp();
 
                     await interaction.editReply({
@@ -2646,17 +3386,17 @@ client.on(
                     );
 
                     return;
+
                 }
 
                 if (
-                    subcomando ===
-                    "general"
+                    sub === "general"
                 ) {
 
                     const canales =
                         await interaction.guild.channels.fetch();
 
-                    let desbloqueados = 0;
+                    let cantidad = 0;
 
                     for (
                         const [, canal]
@@ -2668,7 +3408,9 @@ client.on(
                             ![
                                 ChannelType.GuildText,
                                 ChannelType.GuildAnnouncement
-                            ].includes(canal.type)
+                            ].includes(
+                                canal.type
+                            )
                         ) {
                             continue;
                         }
@@ -2676,48 +3418,51 @@ client.on(
                         try {
 
                             await canal.permissionOverwrites.edit(
+
                                 interaction.guild.roles.everyone,
+
                                 {
-                                    SendMessages: null
+                                    SendMessages:
+                                        null
                                 },
+
                                 {
                                     reason:
                                         `Unlock general por ${interaction.user.tag}`
                                 }
+
                             );
 
-                            desbloqueados++;
+                            cantidad++;
 
-                        } catch (error) {
+                        } catch {}
 
-                            console.error(
-                                `❌ No se pudo desbloquear #${canal.name}:`,
-                                error.message || error
-                            );
-                        }
                     }
 
                     const embed =
                         new EmbedBuilder()
+
                             .setColor(0x57F287)
+
                             .setTitle(
                                 "🔓 SERVIDOR DESBLOQUEADO"
                             )
-                            .setDescription(
-                                "🟢 Se realizó el desbloqueo general."
-                            )
+
                             .addFields(
                                 {
-                                    name: "📊 Canales desbloqueados",
+                                    name:
+                                        "📊 Canales",
                                     value:
-                                        `${desbloqueados}`
+                                        `${cantidad}`
                                 },
                                 {
-                                    name: "🛡️ Desbloqueado por",
+                                    name:
+                                        "🛡️ Desbloqueado por",
                                     value:
                                         `${interaction.user}`
                                 }
                             )
+
                             .setTimestamp();
 
                     await interaction.editReply({
@@ -2730,7 +3475,9 @@ client.on(
                     );
 
                     return;
+
                 }
+
             }
 
         } catch (error) {
@@ -2748,91 +3495,104 @@ client.on(
                 ) {
 
                     await interaction.editReply({
+
                         content:
                             "❌ Ocurrió un error al ejecutar el comando."
+
                     });
 
                 } else {
 
                     await interaction.reply({
+
                         content:
                             "❌ Ocurrió un error al ejecutar el comando.",
+
                         ephemeral: true
+
                     });
+
                 }
 
             } catch {}
+
         }
+
     }
 );
 
 // =====================================================
-// ERRORES DEL CLIENTE
+// ERRORES
 // =====================================================
 
 client.on(
     "error",
     error => {
+
         console.error(
-            "❌ ERROR DEL CLIENTE DISCORD:",
+            "❌ ERROR DEL CLIENTE:",
             error
         );
+
     }
 );
 
 client.on(
     "warn",
     warning => {
+
         console.warn(
             "⚠️ DISCORD:",
             warning
         );
+
     }
 );
-
-// =====================================================
-// PROCESO
-// =====================================================
 
 process.on(
     "unhandledRejection",
     error => {
+
         console.error(
             "❌ UNHANDLED REJECTION:",
             error
         );
+
     }
 );
 
 process.on(
     "uncaughtException",
     error => {
+
         console.error(
             "❌ UNCAUGHT EXCEPTION:",
             error
         );
+
     }
 );
 
 // =====================================================
-// COMPROBAR TOKEN
+// TOKEN
 // =====================================================
 
 if (!TOKEN) {
 
     console.error(
-        "❌ ERROR: No existe la variable DISCORD_TOKEN."
+        "❌ ERROR: No existe DISCORD_TOKEN."
     );
 
     console.error(
-        "👉 En Wisbyte tenés que crear una variable de entorno llamada DISCORD_TOKEN con el token de tu bot."
+        "👉 Creá la variable de entorno DISCORD_TOKEN con el token del bot."
     );
 
     process.exit(1);
+
 }
 
 // =====================================================
-// INICIO
+// INICIAR
 // =====================================================
 
 (async () => {
@@ -2842,10 +3602,12 @@ if (!TOKEN) {
         await registrarComandos();
 
         console.log(
-            "🔐 Iniciando sesión en Discord..."
+            "🔐 Iniciando sesión..."
         );
 
-        await client.login(TOKEN);
+        await client.login(
+            TOKEN
+        );
 
     } catch (error) {
 
@@ -2858,6 +3620,7 @@ if (!TOKEN) {
         );
 
         process.exit(1);
+
     }
 
 })();
