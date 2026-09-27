@@ -137,6 +137,18 @@ const commands = [
         .addStringOption(opt => opt.setName("id").setDescription("ID del usuario").setRequired(true)),
 
     new SlashCommandBuilder()
+        .setName("lock")
+        .setDescription("Bloquea canales para que nadie pueda escribir.")
+        .addSubcommand(sub => sub.setName("canal").setDescription("Bloquea este canal"))
+        .addSubcommand(sub => sub.setName("general").setDescription("Bloquea todos los canales de texto")),
+
+    new SlashCommandBuilder()
+        .setName("unlock")
+        .setDescription("Desbloquea canales.")
+        .addSubcommand(sub => sub.setName("canal").setDescription("Desbloquea este canal"))
+        .addSubcommand(sub => sub.setName("general").setDescription("Desbloquea todos los canales de texto")),
+
+    new SlashCommandBuilder()
         .setName("create_msj")
         .setDescription("Envía un mensaje personalizado estructurado.")
         .addStringOption(opt => opt.setName("titulo").setDescription("Título del mensaje").setRequired(true))
@@ -174,12 +186,11 @@ client.once("ready", async () => {
 client.on("messageCreate", async message => {
     if (!message.guild || message.author.bot) return;
 
-    // Los administradores ignoran la restricción de Anti-Spam
     if (message.member && message.member.permissions.has(PermissionFlagsBits.Administrator)) return;
 
     const ahora = Date.now();
-    const tiempoLimite = 3000; // 3 segundos
-    const maxMensajes = 5; // Máximo 5 mensajes permitidos en el intervalo
+    const tiempoLimite = 3000;
+    const maxMensajes = 5;
 
     if (!spamMap.has(message.author.id)) {
         spamMap.set(message.author.id, []);
@@ -188,7 +199,6 @@ client.on("messageCreate", async message => {
     const timestamps = spamMap.get(message.author.id);
     timestamps.push(ahora);
 
-    // Filtrar timestamps antiguos
     const filtrados = timestamps.filter(t => ahora - t < tiempoLimite);
     spamMap.set(message.author.id, filtrados);
 
@@ -357,6 +367,86 @@ client.on("interactionCreate", async interaction => {
                 return interaction.reply({ content: "❌ No se encontró ningún baneo activo para esa ID.", ephemeral: true });
             }
             return;
+        }
+
+        // /LOCK
+        if (interaction.commandName === "lock") {
+            const subcomando = interaction.options.getSubcommand();
+
+            if (subcomando === "canal") {
+                await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: false });
+
+                const embedLog = new EmbedBuilder()
+                    .setColor(0xE74C3C)
+                    .setTitle("🔒 CANAL BLOQUEADO")
+                    .setDescription(`El canal ${interaction.channel} fue bloqueado.`)
+                    .addFields({ name: "👮 Moderador", value: `${interaction.user}` })
+                    .setFooter({ text: FOOTER })
+                    .setTimestamp();
+
+                await enviarLog(interaction.guild, embedLog);
+                return interaction.reply({ content: "🔒 Este canal ha sido bloqueado." });
+            }
+
+            if (subcomando === "general") {
+                await interaction.deferReply();
+                const canales = interaction.guild.channels.cache.filter(c => c.type === ChannelType.GuildText);
+
+                for (const [, canal] of canales) {
+                    await canal.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: false }).catch(() => {});
+                }
+
+                const embedLog = new EmbedBuilder()
+                    .setColor(0xE74C3C)
+                    .setTitle("🔒 BLOQUEO GENERAL ACTIVADO")
+                    .setDescription("Todos los canales de texto del servidor fueron bloqueados.")
+                    .addFields({ name: "👮 Moderador", value: `${interaction.user}` })
+                    .setFooter({ text: FOOTER })
+                    .setTimestamp();
+
+                await enviarLog(interaction.guild, embedLog);
+                return interaction.editReply({ content: "🔒 Todos los canales de texto han sido bloqueados." });
+            }
+        }
+
+        // /UNLOCK
+        if (interaction.commandName === "unlock") {
+            const subcomando = interaction.options.getSubcommand();
+
+            if (subcomando === "canal") {
+                await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: null });
+
+                const embedLog = new EmbedBuilder()
+                    .setColor(0x2ECC71)
+                    .setTitle("🔓 CANAL DESBLOQUEADO")
+                    .setDescription(`El canal ${interaction.channel} fue desbloqueado.`)
+                    .addFields({ name: "👮 Moderador", value: `${interaction.user}` })
+                    .setFooter({ text: FOOTER })
+                    .setTimestamp();
+
+                await enviarLog(interaction.guild, embedLog);
+                return interaction.reply({ content: "🔓 Este canal ha sido desbloqueado." });
+            }
+
+            if (subcomando === "general") {
+                await interaction.deferReply();
+                const canales = interaction.guild.channels.cache.filter(c => c.type === ChannelType.GuildText);
+
+                for (const [, canal] of canales) {
+                    await canal.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: null }).catch(() => {});
+                }
+
+                const embedLog = new EmbedBuilder()
+                    .setColor(0x2ECC71)
+                    .setTitle("🔓 DESBLOQUEO GENERAL ACTIVADO")
+                    .setDescription("Todos los canales de texto del servidor fueron desbloqueados.")
+                    .addFields({ name: "👮 Moderador", value: `${interaction.user}` })
+                    .setFooter({ text: FOOTER })
+                    .setTimestamp();
+
+                await enviarLog(interaction.guild, embedLog);
+                return interaction.editReply({ content: "🔓 Todos los canales de texto han sido desbloqueados." });
+            }
         }
 
         // /CREATE_MSJ
