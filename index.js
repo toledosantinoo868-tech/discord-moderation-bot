@@ -16,7 +16,7 @@ const {
 } = require("discord.js");
 
 // =====================================================
-// CONFIGURACIÓN GLOBAL Y ROLES
+// CONFIGURACIÓN GLOBAL Y ROLES POR DEFECTO
 // =====================================================
 
 const TOKEN = process.env.DISCORD_TOKEN;
@@ -24,10 +24,26 @@ const CLIENT_ID = "1552817688378605650";
 
 const OWNER_ROLE_ID = "1553559027697320026";
 const EVERYONE_ROLE_ID = "1553559599963963442";
-const VERIFIED_ROLE_ID = "1553558969924984862";
 
 const BOT_COLOR = 0x3498DB;
 const FOOTER = "Bot creado por DEVLVdarkkidd";
+
+// Plantilla por defecto de la cual NINGÚN servidor escribe directamente
+const CONFIG_POR_DEFECTO = {
+    minecraftIp: "mc.eternalcraft.fun",
+    minecraftPort: "10096",
+    verifiedRoleId: null, // ID del rol de verificado para este servidor
+    welcomeChannelId: null,
+    welcomeTitle: "💙 ETERNAL CRAFT NETWORK",
+    welcomeText: "🎉 **¡Bienvenido/a a Eternal Craft Network, {user}!**\n\n💙 Esperamos que disfrutes de la comunidad.\n\n🔐 Recordá verificarte para poder participar en el servidor.",
+    welcomeBanner: null,
+    verifTitle: "🔵 ETERNAL CRAFT NETWORK",
+    verifDesc: "¡Bienvenido/a a **Eternal Craft Network**! 💙\n\nPara poder hablar y participar en el servidor, primero tenés que verificarte.\n\nPresioná el botón **✅ Verificarse** de abajo.\n\n🔐 Una vez verificado/a recibirás automáticamente el rol correspondiente.\n\n━━━━━━━━━━━━━━━━━━━━\n\n🟢 **Presioná el botón para verificarse.**",
+    verifBtnLabel: "Verificarse",
+    ticketTitle: "🎫 SOPORTE TÉCNICO Y TICKETS",
+    ticketDesc: "Si necesitas ayuda, reportar a un usuario o realizar una consulta al Staff, presiona el botón de abajo para abrir un ticket privado.",
+    ticketBtnLabel: "Abrir Ticket"
+};
 
 // =====================================================
 // ALMACENAMIENTO INDEPENDIENTE POR SERVIDOR (GUILD)
@@ -36,21 +52,11 @@ const FOOTER = "Bot creado por DEVLVdarkkidd";
 const guildConfigs = new Map();
 
 function obtenerConfigServer(guildId) {
+    if (!guildId) return null;
+
     if (!guildConfigs.has(guildId)) {
-        guildConfigs.set(guildId, {
-            minecraftIp: "mc.eternalcraft.fun",
-            minecraftPort: "10096",
-            welcomeChannelId: null,
-            welcomeTitle: "💙 ETERNAL CRAFT NETWORK",
-            welcomeText: "🎉 **¡Bienvenido/a a Eternal Craft Network, {user}!**\n\n💙 Esperamos que disfrutes de la comunidad.\n\n🔐 Recordá verificarte para poder participar en el servidor.",
-            welcomeBanner: null,
-            verifTitle: "🔵 ETERNAL CRAFT NETWORK",
-            verifDesc: "¡Bienvenido/a a **Eternal Craft Network**! 💙\n\nPara poder hablar y participar en el servidor, primero tenés que verificarte.\n\nPresioná el botón **✅ Verificarse** de abajo.\n\n🔐 Una vez verificado/a recibirás automáticamente el rol correspondiente.\n\n━━━━━━━━━━━━━━━━━━━━\n\n🟢 **Presioná el botón para verificarse.**",
-            verifBtnLabel: "Verificarse",
-            ticketTitle: "🎫 SOPORTE TÉCNICO Y TICKETS",
-            ticketDesc: "Si necesitas ayuda, reportar a un usuario o realizar una consulta al Staff, presiona el botón de abajo para abrir un ticket privado.",
-            ticketBtnLabel: "Abrir Ticket"
-        });
+        const copiaIndependiente = JSON.parse(JSON.stringify(CONFIG_POR_DEFECTO));
+        guildConfigs.set(guildId, copiaIndependiente);
     }
     return guildConfigs.get(guildId);
 }
@@ -69,7 +75,7 @@ const client = new Client({
 });
 
 // =====================================================
-// FUNCIONES AUXILIARES DE PERMISOS Y DURECIONES
+// FUNCIONES AUXILIARES DE PERMISOS Y DURACIONES
 // =====================================================
 
 function esAdminOOwner(interaction) {
@@ -215,10 +221,11 @@ const commands = [
         .addSubcommand(subcommand =>
             subcommand
                 .setName("verificacion")
-                .setDescription("Configura el texto del panel de verificación.")
+                .setDescription("Configura el texto y el rol del panel de verificación.")
                 .addStringOption(opt => opt.setName("titulo").setDescription("Título del embed").setRequired(false))
                 .addStringOption(opt => opt.setName("descripcion").setDescription("Cuerpo del mensaje").setRequired(false))
                 .addStringOption(opt => opt.setName("boton").setDescription("Texto del botón").setRequired(false))
+                .addRoleOption(opt => opt.setName("rol").setDescription("Rol que otorgará al verificarse").setRequired(false))
         )
         .addSubcommand(subcommand =>
             subcommand
@@ -350,33 +357,43 @@ client.on("guildMemberAdd", async member => {
 
 client.on("interactionCreate", async interaction => {
     try {
-        const config = interaction.guild ? obtenerConfigServer(interaction.guild.id) : null;
+        if (!interaction.guild) return;
+
+        const configServer = obtenerConfigServer(interaction.guild.id);
 
         // VERIFICACIÓN
         if (interaction.isButton() && interaction.customId === "eternal_verificar") {
             const miembro = interaction.member;
-            const rol = await interaction.guild.roles.fetch(VERIFIED_ROLE_ID);
 
-            if (!rol) {
-                return interaction.reply({ content: "❌ No encontré el rol de verificado.", ephemeral: true });
+            if (!configServer.verifiedRoleId) {
+                return interaction.reply({
+                    content: "❌ Este servidor no tiene configurado un rol de verificado. Pide a un administrador que use `/setup verificacion` e incluya el parámetro `rol`.",
+                    ephemeral: true
+                });
             }
 
-            if (miembro.roles.cache.has(VERIFIED_ROLE_ID)) {
+            const rol = await interaction.guild.roles.fetch(configServer.verifiedRoleId).catch(() => null);
+
+            if (!rol) {
+                return interaction.reply({ content: "❌ El rol de verificado configurado ya no existe en este servidor.", ephemeral: true });
+            }
+
+            if (miembro.roles.cache.has(rol.id)) {
                 return interaction.reply({ content: "✅ Ya estás verificado/a.", ephemeral: true });
             }
 
             const bot = interaction.guild.members.me;
 
             if (!bot || rol.position >= bot.roles.highest.position) {
-                return interaction.reply({ content: "❌ El rol del bot debe estar por encima del rol Verificado.", ephemeral: true });
+                return interaction.reply({ content: "❌ El rol del bot debe estar por encima del rol de Verificado en la lista de roles del servidor.", ephemeral: true });
             }
 
-            await miembro.roles.add(rol, "Verificación de Eternal Craft Network");
+            await miembro.roles.add(rol, "Verificación completada");
 
             const embed = new EmbedBuilder()
                 .setColor(0x2ECC71)
                 .setTitle("✅ VERIFICACIÓN COMPLETADA")
-                .setDescription(`¡Listo ${interaction.user}! 💙\n\nRecibiste el rol ${rol} y ya podés participar en **Eternal Craft Network**.`)
+                .setDescription(`¡Listo ${interaction.user}! 💜\n\nRecibiste el rol ${rol} y ya podés participar en el servidor.`)
                 .setFooter({ text: FOOTER })
                 .setTimestamp();
 
@@ -460,11 +477,11 @@ client.on("interactionCreate", async interaction => {
         if (interaction.commandName === "ip") {
             const embed = new EmbedBuilder()
                 .setColor(BOT_COLOR)
-                .setTitle("🎮 ETERNAL CRAFT NETWORK")
-                .setDescription("Conectate a nuestro servidor de Minecraft:")
+                .setTitle("🎮 SERVIDOR DE MINECRAFT")
+                .setDescription("Conectate a nuestro servidor:")
                 .addFields(
-                    { name: "🌐 IP", value: `\`${config.minecraftIp}\``, inline: true },
-                    { name: "🔌 Puerto", value: `\`${config.minecraftPort}\``, inline: true }
+                    { name: "🌐 IP", value: `\`${configServer.minecraftIp}\``, inline: true },
+                    { name: "🔌 Puerto", value: `\`${configServer.minecraftPort}\``, inline: true }
                 )
                 .setFooter({ text: FOOTER })
                 .setTimestamp();
@@ -472,7 +489,7 @@ client.on("interactionCreate", async interaction => {
             return interaction.reply({ embeds: [embed] });
         }
 
-        // /SETUP (EDITAR SOLO EL SERVIDOR ACTUAL)
+        // /SETUP
         if (interaction.commandName === "setup") {
             if (!esAdminOOwner(interaction)) {
                 return interaction.reply({ content: "❌ Necesitas el permiso de **Administrar Servidor** o ser Owner para usar este comando.", ephemeral: true });
@@ -484,10 +501,10 @@ client.on("interactionCreate", async interaction => {
                 const nuevaIp = interaction.options.getString("ip");
                 const nuevoPuerto = interaction.options.getString("puerto");
 
-                config.minecraftIp = nuevaIp;
-                if (nuevoPuerto) config.minecraftPort = nuevoPuerto;
+                configServer.minecraftIp = nuevaIp;
+                if (nuevoPuerto) configServer.minecraftPort = nuevoPuerto;
 
-                return interaction.reply({ content: `✅ **IP:** \`${config.minecraftIp}\` | **Puerto:** \`${config.minecraftPort}\``, ephemeral: true });
+                return interaction.reply({ content: `✅ **IP actualizada:** \`${configServer.minecraftIp}\` | **Puerto:** \`${configServer.minecraftPort}\``, ephemeral: true });
             }
 
             if (subcomando === "bienvenidas") {
@@ -495,23 +512,29 @@ client.on("interactionCreate", async interaction => {
                 const texto = interaction.options.getString("texto");
                 const banner = interaction.options.getString("banner");
 
-                if (titulo) config.welcomeTitle = titulo;
-                if (texto) config.welcomeText = texto;
-                if (banner) config.welcomeBanner = banner;
+                if (titulo) configServer.welcomeTitle = titulo;
+                if (texto) configServer.welcomeText = texto;
+                if (banner) configServer.welcomeBanner = banner;
 
-                return interaction.reply({ content: "✅ Ajustes de **Bienvenidas** actualizados exitosamente en este servidor.", ephemeral: true });
+                return interaction.reply({ content: "✅ Ajustes de **Bienvenidas** actualizados en este servidor.", ephemeral: true });
             }
 
             if (subcomando === "verificacion") {
                 const titulo = interaction.options.getString("titulo");
                 const desc = interaction.options.getString("descripcion");
                 const boton = interaction.options.getString("boton");
+                const rol = interaction.options.getRole("rol");
 
-                if (titulo) config.verifTitle = titulo;
-                if (desc) config.verifDesc = desc;
-                if (boton) config.verifBtnLabel = boton;
+                if (titulo) configServer.verifTitle = titulo;
+                if (desc) configServer.verifDesc = desc;
+                if (boton) configServer.verifBtnLabel = boton;
+                if (rol) configServer.verifiedRoleId = rol.id;
 
-                return interaction.reply({ content: "✅ Ajustes de **Verificación** actualizados. Vuelve a enviar el panel con `/verificacion aqui`.", ephemeral: true });
+                let respuesta = "✅ Ajustes de **Verificación** actualizados.";
+                if (rol) respuesta += `\n🎭 **Rol asignado:** ${rol}`;
+                respuesta += "\n\nRecuerda usar `/verificacion aqui` para actualizar el panel en el canal.";
+
+                return interaction.reply({ content: respuesta, ephemeral: true });
             }
 
             if (subcomando === "ticket") {
@@ -519,9 +542,9 @@ client.on("interactionCreate", async interaction => {
                 const desc = interaction.options.getString("descripcion");
                 const boton = interaction.options.getString("boton");
 
-                if (titulo) config.ticketTitle = titulo;
-                if (desc) config.ticketDesc = desc;
-                if (boton) config.ticketBtnLabel = boton;
+                if (titulo) configServer.ticketTitle = titulo;
+                if (desc) configServer.ticketDesc = desc;
+                if (boton) configServer.ticketBtnLabel = boton;
 
                 return interaction.reply({ content: "✅ Ajustes de **Tickets** actualizados. Vuelve a enviar el panel con `/ticket aqui`.", ephemeral: true });
             }
@@ -534,8 +557,8 @@ client.on("interactionCreate", async interaction => {
             }
 
             if (interaction.options.getSubcommand() === "aqui") {
-                await interaction.channel.send(crearPanelVerificacion(config));
-                return interaction.reply({ content: "✅ Panel de verificación enviado correctamente.", ephemeral: true });
+                await interaction.channel.send(crearPanelVerificacion(configServer));
+                return interaction.reply({ content: "✅ Panel de verificación enviado en este servidor.", ephemeral: true });
             }
         }
 
@@ -546,8 +569,8 @@ client.on("interactionCreate", async interaction => {
             }
 
             if (interaction.options.getSubcommand() === "aqui") {
-                await interaction.channel.send(crearPanelTicket(config));
-                return interaction.reply({ content: "✅ Panel de tickets enviado correctamente.", ephemeral: true });
+                await interaction.channel.send(crearPanelTicket(configServer));
+                return interaction.reply({ content: "✅ Panel de tickets enviado en este servidor.", ephemeral: true });
             }
         }
 
@@ -557,7 +580,7 @@ client.on("interactionCreate", async interaction => {
                 return interaction.reply({ content: "❌ Necesitas el permiso de **Administrar Servidor** o ser Owner para usar este comando.", ephemeral: true });
             }
 
-            config.welcomeChannelId = interaction.channel.id;
+            configServer.welcomeChannelId = interaction.channel.id;
             return interaction.reply({ content: `✅ Este canal quedó configurado para bienvenidas en este servidor.\n\n📍 Canal: ${interaction.channel}`, ephemeral: true });
         }
 
