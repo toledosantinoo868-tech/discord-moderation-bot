@@ -16,84 +16,41 @@ const {
 const http = require("http");
 
 // =====================================================
-// CONFIGURACIÓN GENERAL
+// CONFIGURACIÓN
 // =====================================================
 
 const CLIENT_ID = "1552817688378605650";
 const TOKEN = process.env.DISCORD_TOKEN;
-const PORT = Number(process.env.PORT) || 10000;
 
 // =====================================================
-// CONFIGURACIÓN DE LOS 2 DISCORD
+// ROLES
 // =====================================================
 
-const SERVERS = {
-
-    // =================================================
-    // DISCORD 1
-    // =================================================
-
-    "1504878187383885956": {
-
-        name: "Discord 1",
-
-        roles: {
-            owner: "1531489394127536188",
-            staff: "1532574929235607632",
-            mod: "1538995243490353263",
-            verify: "1544521207708131409"
-        },
-
-        channels: {
-            welcome: "1531493723840450580",
-            logs: "1544504719047917610",
-            verify: "1544523269376450590",
-            ticketPanel: "1533646002878283936"
-        },
-
-        ticketCategory: "1532906564569272401"
-    },
-
-    // =================================================
-    // DISCORD 2
-    // =================================================
-
-    "1553558771706626089": {
-
-        name: "Discord 2",
-
-        roles: {
-            owner: "1553559027697320026",
-            coOwner: "1553561615314591866",
-            admin: "1553559320644427796",
-            adminJunior: "1553559176985190541",
-            mod: "1553559498533249135",
-            verify: "1553558969924984862"
-        },
-
-        channels: {
-            welcome: "1553577251604271175",
-            logs: "1553583452186615818",
-            verify: "1553582721878724648",
-            ticketPanel: "1553583694642417834"
-        },
-
-        ticketCategory: "1553582203378737162"
-    }
-};
+const OWNER_ROLE_ID = "1531489394127536188";
+const STAFF_ROLE_ID = "1532574929235607632";
+const MOD_ROLE_ID = "1538995243490353263";
+const VERIFY_ROLE_ID = "1544521207708131409";
 
 // =====================================================
-// OBTENER CONFIGURACIÓN DEL SERVIDOR
+// CANALES
 // =====================================================
 
-function getConfig(guild) {
-    if (!guild) return null;
-    return SERVERS[guild.id] || null;
-}
+const WELCOME_CHANNEL_ID = "1531493723840450580";
+const LOG_CHANNEL_ID = "1544504719047917610";
+const VERIFY_CHANNEL_ID = "1544523269376450590";
+
+// =====================================================
+// TICKETS
+// =====================================================
+
+const TICKET_PANEL_CHANNEL_ID = "1533646002878283936";
+const TICKET_CATEGORY_ID = "1532906564569272401";
 
 // =====================================================
 // SERVIDOR HTTP
 // =====================================================
+
+const PORT = Number(process.env.PORT) || 10000;
 
 const httpServer = http.createServer((req, res) => {
     res.writeHead(200, {
@@ -104,7 +61,7 @@ const httpServer = http.createServer((req, res) => {
 });
 
 httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`🌐 Servidor HTTP escuchando en ${PORT}`);
+    console.log(`🌐 Servidor HTTP escuchando en el puerto ${PORT}`);
 });
 
 // =====================================================
@@ -126,11 +83,21 @@ const client = new Client({
 });
 
 // =====================================================
-// CACHE
+// CACHE DE MENSAJES
 // =====================================================
 
 const messageCache = new Map();
+
+// =====================================================
+// ADVERTENCIAS
+// =====================================================
+
 const warnings = new Map();
+
+// =====================================================
+// ANTI-SPAM
+// =====================================================
+
 const spamTracker = new Map();
 
 const SPAM_MESSAGE_LIMIT = 5;
@@ -138,66 +105,36 @@ const SPAM_WINDOW = 5000;
 const SPAM_TIMEOUT = 30 * 1000;
 
 // =====================================================
-// PERMISOS
+// FUNCIONES DE PERMISOS
 // =====================================================
 
-function tieneRol(member, roleId) {
-    if (!member || !roleId) return false;
-
-    return member.roles?.cache?.has(roleId);
-}
-
 function esOwner(interaction) {
-
     if (!interaction.guild) return false;
-
-    const config = getConfig(interaction.guild);
-
-    if (!config) return false;
 
     return (
         interaction.guild.ownerId === interaction.user.id ||
-        tieneRol(interaction.member, config.roles.owner)
+        interaction.member?.roles?.cache?.has(OWNER_ROLE_ID)
     );
 }
 
 function esStaff(interaction) {
-
     if (!interaction.guild) return false;
-
-    const config = getConfig(interaction.guild);
-
-    if (!config) return false;
-
-    const member = interaction.member;
-
-    if (!member) return false;
 
     return (
         esOwner(interaction) ||
-
-        tieneRol(member, config.roles.coOwner) ||
-
-        tieneRol(member, config.roles.admin) ||
-
-        tieneRol(member, config.roles.adminJunior) ||
-
-        tieneRol(member, config.roles.staff) ||
-
-        tieneRol(member, config.roles.mod) ||
-
-        member.permissions?.has(
+        interaction.member?.roles?.cache?.has(STAFF_ROLE_ID) ||
+        interaction.member?.roles?.cache?.has(MOD_ROLE_ID) ||
+        interaction.member?.permissions?.has(
             PermissionFlagsBits.Administrator
         )
     );
 }
 
 // =====================================================
-// JERARQUÍA
+// PROTECCIÓN DE JERARQUÍA
 // =====================================================
 
 function puedeModerar(interaction, miembro) {
-
     if (!interaction.guild || !miembro) {
         return false;
     }
@@ -223,11 +160,10 @@ function puedeModerar(interaction, miembro) {
 }
 
 // =====================================================
-// GUARDAR MENSAJES
+// GUARDAR MENSAJE
 // =====================================================
 
 function guardarMensaje(message) {
-
     if (!message) return;
     if (!message.id) return;
     if (!message.guild) return;
@@ -248,7 +184,6 @@ function guardarMensaje(message) {
     });
 
     if (messageCache.size > 5000) {
-
         const primero =
             messageCache.keys().next().value;
 
@@ -259,31 +194,23 @@ function guardarMensaje(message) {
 }
 
 // =====================================================
-// LOGS
+// ENVIAR LOG
 // =====================================================
 
 async function enviarLog(guild, embed) {
-
     try {
+        if (!guild) return;
 
-        const config = getConfig(guild);
+        const canal =
+            await guild.channels.fetch(LOG_CHANNEL_ID);
 
-        if (!config) {
-            console.log(
-                `⚠️ Servidor no configurado: ${guild.id}`
-            );
+        if (!canal) {
+            console.log("❌ No existe el canal de logs.");
             return;
         }
 
-        const canal =
-            await guild.channels.fetch(
-                config.channels.logs
-            );
-
-        if (!canal || !canal.isTextBased()) {
-            console.log(
-                `❌ No existe el canal de logs en ${guild.name}`
-            );
+        if (!canal.isTextBased()) {
+            console.log("❌ El canal de logs no es de texto.");
             return;
         }
 
@@ -292,7 +219,6 @@ async function enviarLog(guild, embed) {
         });
 
     } catch (error) {
-
         console.error(
             "❌ ERROR ENVIANDO LOG:",
             error.message || error
@@ -301,11 +227,10 @@ async function enviarLog(guild, embed) {
 }
 
 // =====================================================
-// DURACIÓN
+// PARSEAR DURACIÓN
 // =====================================================
 
 function convertirDuracion(entrada) {
-
     if (!entrada || typeof entrada !== "string") {
         return null;
     }
@@ -315,7 +240,9 @@ function convertirDuracion(entrada) {
             /^(\d+)\s*(s|m|h|d)$/i
         );
 
-    if (!match) return null;
+    if (!match) {
+        return null;
+    }
 
     const cantidad = Number(match[1]);
     const unidad = match[2].toLowerCase();
@@ -335,7 +262,6 @@ function convertirDuracion(entrada) {
 // =====================================================
 
 function crearPanelVerificacion() {
-
     const embed =
         new EmbedBuilder()
             .setColor(0x8E44AD)
@@ -343,8 +269,10 @@ function crearPanelVerificacion() {
             .setDescription(
                 "¡Bienvenido/a a **La Orden Morada**! 💜\n\n" +
                 "Para acceder al servidor, primero tenés que verificarte.\n\n" +
-                "Al presionar **✅ Verificar**, aceptás respetar las reglas y normas de la comunidad.\n\n" +
-                "🔐 Una vez verificado/a, recibirás automáticamente el rol correspondiente.\n\n" +
+                "Al presionar **✅ Verificar**, aceptás respetar " +
+                "las reglas y normas de la comunidad.\n\n" +
+                "🔐 Una vez verificado/a, recibirás automáticamente " +
+                "el rol correspondiente.\n\n" +
                 "💜 ¡Gracias por formar parte de **La Orden Morada**!\n\n" +
                 "━━━━━━━━━━━━━━━━━━━━\n\n" +
                 "🟢 **Presioná el botón de abajo para verificarte.**"
@@ -361,11 +289,13 @@ function crearPanelVerificacion() {
             .setEmoji("✅")
             .setStyle(ButtonStyle.Success);
 
+    const fila =
+        new ActionRowBuilder()
+            .addComponents(boton);
+
     return {
         embeds: [embed],
-        components: [
-            new ActionRowBuilder().addComponents(boton)
-        ]
+        components: [fila]
     };
 }
 
@@ -374,7 +304,6 @@ function crearPanelVerificacion() {
 // =====================================================
 
 function crearPanelTickets() {
-
     const embed =
         new EmbedBuilder()
             .setColor(0x5865F2)
@@ -405,11 +334,13 @@ function crearPanelTickets() {
             .setEmoji("🎫")
             .setStyle(ButtonStyle.Success);
 
+    const fila =
+        new ActionRowBuilder()
+            .addComponents(boton);
+
     return {
         embeds: [embed],
-        components: [
-            new ActionRowBuilder().addComponents(boton)
-        ]
+        components: [fila]
     };
 }
 
@@ -418,7 +349,6 @@ function crearPanelTickets() {
 // =====================================================
 
 function crearMensajeTicket(member) {
-
     const embed =
         new EmbedBuilder()
             .setColor(0x8E44AD)
@@ -427,9 +357,11 @@ function crearMensajeTicket(member) {
                 `Hola ${member} 💜\n\n` +
                 "Tu ticket fue creado correctamente.\n\n" +
                 "📌 Explicá detalladamente el motivo de tu consulta.\n\n" +
-                "🛡️ Un miembro del Staff, Moderación u Owner atenderá tu ticket.\n\n" +
+                "🛡️ Un miembro del Staff, Moderación u Owner " +
+                "atenderá tu ticket.\n\n" +
                 "🚫 No hagas spam ni menciones repetidamente al equipo.\n\n" +
-                "Cuando el problema esté solucionado, podés utilizar **🔒 Cerrar ticket**."
+                "Cuando el problema esté solucionado, podés " +
+                "utilizar **🔒 Cerrar ticket**."
             )
             .setFooter({
                 text: "La Orden Morada • Soporte"
@@ -443,12 +375,14 @@ function crearMensajeTicket(member) {
             .setEmoji("🔒")
             .setStyle(ButtonStyle.Danger);
 
+    const fila =
+        new ActionRowBuilder()
+            .addComponents(cerrar);
+
     return {
         content: `${member}`,
         embeds: [embed],
-        components: [
-            new ActionRowBuilder().addComponents(cerrar)
-        ]
+        components: [fila]
     };
 }
 
@@ -457,23 +391,11 @@ function crearMensajeTicket(member) {
 // =====================================================
 
 async function asegurarPanelVerificacion() {
-
-    for (const [, guild] of client.guilds.cache) {
-
-        try {
-
-            const config = getConfig(guild);
-
-            if (!config) {
-                console.log(
-                    `⚠️ ${guild.name} no está configurado.`
-                );
-                continue;
-            }
-
+    try {
+        for (const [, guild] of client.guilds.cache) {
             const canal =
                 await guild.channels.fetch(
-                    config.channels.verify
+                    VERIFY_CHANNEL_ID
                 );
 
             if (!canal || !canal.isTextBased()) {
@@ -486,34 +408,37 @@ async function asegurarPanelVerificacion() {
                 });
 
             const existe =
-                mensajes.find(message =>
-                    message.author?.id === client.user.id &&
-                    message.components?.some(row =>
+                mensajes.find(message => {
+                    if (
+                        message.author?.id !==
+                        client.user.id
+                    ) {
+                        return false;
+                    }
+
+                    return message.components?.some(row =>
                         row.components?.some(component =>
                             component.customId ===
                             "verificar_usuario"
                         )
-                    )
-                );
+                    );
+                });
 
             if (!existe) {
-
                 await canal.send(
                     crearPanelVerificacion()
                 );
 
                 console.log(
-                    `✅ Panel de verificación enviado en ${guild.name}`
+                    `✅ Panel de verificación enviado en ${guild.name}.`
                 );
             }
-
-        } catch (error) {
-
-            console.error(
-                `❌ ERROR VERIFICACIÓN ${guild.name}:`,
-                error.message || error
-            );
         }
+    } catch (error) {
+        console.error(
+            "❌ ERROR PANEL VERIFICACIÓN:",
+            error.message || error
+        );
     }
 }
 
@@ -522,18 +447,11 @@ async function asegurarPanelVerificacion() {
 // =====================================================
 
 async function asegurarPanelTickets() {
-
-    for (const [, guild] of client.guilds.cache) {
-
-        try {
-
-            const config = getConfig(guild);
-
-            if (!config) continue;
-
+    try {
+        for (const [, guild] of client.guilds.cache) {
             const canal =
                 await guild.channels.fetch(
-                    config.channels.ticketPanel
+                    TICKET_PANEL_CHANNEL_ID
                 );
 
             if (!canal || !canal.isTextBased()) {
@@ -546,34 +464,37 @@ async function asegurarPanelTickets() {
                 });
 
             const existe =
-                mensajes.find(message =>
-                    message.author?.id === client.user.id &&
-                    message.components?.some(row =>
+                mensajes.find(message => {
+                    if (
+                        message.author?.id !==
+                        client.user.id
+                    ) {
+                        return false;
+                    }
+
+                    return message.components?.some(row =>
                         row.components?.some(component =>
                             component.customId ===
                             "crear_ticket"
                         )
-                    )
-                );
+                    );
+                });
 
             if (!existe) {
-
                 await canal.send(
                     crearPanelTickets()
                 );
 
                 console.log(
-                    `✅ Panel de tickets enviado en ${guild.name}`
+                    `✅ Panel de tickets enviado en ${guild.name}.`
                 );
             }
-
-        } catch (error) {
-
-            console.error(
-                `❌ ERROR TICKETS ${guild.name}:`,
-                error.message || error
-            );
         }
+    } catch (error) {
+        console.error(
+            "❌ ERROR PANEL TICKETS:",
+            error.message || error
+        );
     }
 }
 
@@ -585,7 +506,9 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("ip")
-        .setDescription("Muestra la IP del servidor de Minecraft."),
+        .setDescription(
+            "Muestra la IP del servidor de Minecraft."
+        ),
 
     new SlashCommandBuilder()
         .setName("ban")
@@ -595,6 +518,9 @@ const commands = [
                 .setName("usuario")
                 .setDescription("Usuario que quieres banear")
                 .setRequired(true)
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.BanMembers
         ),
 
     new SlashCommandBuilder()
@@ -611,6 +537,9 @@ const commands = [
                 .setName("duracion")
                 .setDescription("Ej: 30s, 5m, 1h, 1d")
                 .setRequired(true)
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ModerateMembers
         ),
 
     new SlashCommandBuilder()
@@ -621,6 +550,9 @@ const commands = [
                 .setName("usuario")
                 .setDescription("Usuario al que quitar el mute")
                 .setRequired(true)
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ModerateMembers
         ),
 
     new SlashCommandBuilder()
@@ -631,6 +563,9 @@ const commands = [
                 .setName("id")
                 .setDescription("ID del usuario")
                 .setRequired(true)
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.BanMembers
         ),
 
     new SlashCommandBuilder()
@@ -645,13 +580,15 @@ const commands = [
         .addStringOption(option =>
             option
                 .setName("motivo")
-                .setDescription("Motivo")
+                .setDescription("Motivo de la advertencia")
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("warnings")
-        .setDescription("Muestra las advertencias.")
+        .setDescription(
+            "Muestra las advertencias de un usuario."
+        )
         .addUserOption(option =>
             option
                 .setName("usuario")
@@ -661,11 +598,11 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("clear")
-        .setDescription("Elimina mensajes.")
+        .setDescription("Elimina mensajes de un canal.")
         .addIntegerOption(option =>
             option
                 .setName("cantidad")
-                .setDescription("Cantidad")
+                .setDescription("Cantidad de mensajes a eliminar")
                 .setMinValue(1)
                 .setMaxValue(100)
                 .setRequired(true)
@@ -677,49 +614,49 @@ const commands = [
         .addStringOption(option =>
             option
                 .setName("tiempo")
-                .setDescription("Ej: 5s, 1m, 5m")
+                .setDescription("Ej: 5s, 10s, 1m, 5m")
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("lock")
-        .setDescription("Bloquea canales.")
-        .addSubcommand(sub =>
-            sub
+        .setDescription("Bloquea un canal o todo el servidor.")
+        .addSubcommand(subcommand =>
+            subcommand
                 .setName("canal")
-                .setDescription("Bloquea este canal")
+                .setDescription("Bloquea este canal.")
         )
-        .addSubcommand(sub =>
-            sub
+        .addSubcommand(subcommand =>
+            subcommand
                 .setName("general")
-                .setDescription("Bloquea todos los canales")
+                .setDescription("Bloquea todos los canales.")
         ),
 
     new SlashCommandBuilder()
         .setName("unlock")
-        .setDescription("Desbloquea canales.")
-        .addSubcommand(sub =>
-            sub
+        .setDescription("Desbloquea un canal o todo el servidor.")
+        .addSubcommand(subcommand =>
+            subcommand
                 .setName("canal")
-                .setDescription("Desbloquea este canal")
+                .setDescription("Desbloquea este canal.")
         )
-        .addSubcommand(sub =>
-            sub
+        .addSubcommand(subcommand =>
+            subcommand
                 .setName("general")
-                .setDescription("Desbloquea todos los canales")
+                .setDescription("Desbloquea todos los canales.")
         ),
 
     new SlashCommandBuilder()
         .setName("create")
         .setDescription("Crea un mensaje personalizado.")
-        .addSubcommand(sub =>
-            sub
+        .addSubcommand(subcommand =>
+            subcommand
                 .setName("msj")
-                .setDescription("Crea un embed")
+                .setDescription("Crea un mensaje en formato embed.")
                 .addStringOption(option =>
                     option
                         .setName("texto")
-                        .setDescription("Texto")
+                        .setDescription("Texto del mensaje.")
                         .setRequired(true)
                 )
         )
@@ -736,10 +673,8 @@ const rest =
     }).setToken(TOKEN);
 
 async function registrarComandos() {
-
     try {
-
-        console.log("🔄 Registrando comandos...");
+        console.log("🔄 Registrando comandos slash...");
 
         await rest.put(
             Routes.applicationCommands(CLIENT_ID),
@@ -749,11 +684,10 @@ async function registrarComandos() {
         );
 
         console.log(
-            `✅ ${commands.length} comandos registrados.`
+            `✅ ${commands.length} comandos registrados correctamente.`
         );
 
     } catch (error) {
-
         console.error(
             "❌ ERROR REGISTRANDO COMANDOS:",
             error.message || error
@@ -762,363 +696,402 @@ async function registrarComandos() {
 }
 
 // =====================================================
-// BOT READY
+// BOT LISTO
 // =====================================================
 
-client.once("clientReady", async () => {
+client.once(
+    "clientReady",
+    async () => {
 
-    console.log("====================================");
-    console.log(`✅ BOT: ${client.user.tag}`);
-    console.log(`🆔 BOT ID: ${client.user.id}`);
-    console.log(
-        `🏠 SERVIDORES: ${client.guilds.cache.size}`
-    );
-    console.log("🛡️ Anti-spam: ACTIVADO");
-    console.log("🔗 Anti-invitaciones: ACTIVADO");
-    console.log("🎫 Tickets: ACTIVADO");
-    console.log("🛡️ Verificación: ACTIVADA");
-    console.log("====================================");
+        console.log(
+            "=========================================="
+        );
 
-    for (const [, guild] of client.guilds.cache) {
+        console.log(
+            `✅ BOT CONECTADO: ${client.user.tag}`
+        );
 
-        if (SERVERS[guild.id]) {
+        console.log(
+            `🆔 CLIENT ID: ${client.user.id}`
+        );
 
-            console.log(
-                `✅ Configuración encontrada: ${guild.name} (${guild.id})`
-            );
+        console.log(
+            `🏠 SERVIDORES: ${client.guilds.cache.size}`
+        );
 
-        } else {
+        console.log(
+            "🛡️ Anti-spam: ACTIVADO"
+        );
 
-            console.log(
-                `⚠️ Servidor no configurado: ${guild.name} (${guild.id})`
-            );
-        }
+        console.log(
+            "🔗 Bloqueo de invitaciones: ACTIVADO"
+        );
+
+        console.log(
+            "🎫 Sistema de tickets: ACTIVADO"
+        );
+
+        console.log(
+            "🛡️ Sistema de verificación: ACTIVADO"
+        );
+
+        console.log(
+            "=========================================="
+        );
+
+        setTimeout(
+            async () => {
+                await asegurarPanelVerificacion();
+                await asegurarPanelTickets();
+            },
+            2000
+        );
     }
-
-    setTimeout(async () => {
-
-        await asegurarPanelVerificacion();
-        await asegurarPanelTickets();
-
-    }, 2000);
-});
+);
 
 // =====================================================
 // MENSAJES
 // =====================================================
 
-client.on("messageCreate", async message => {
+client.on(
+    "messageCreate",
+    async message => {
 
-    try {
+        try {
 
-        if (!message.guild) return;
-        if (message.author?.bot) return;
+            if (!message.guild) return;
+            if (message.author?.bot) return;
 
-        const config = getConfig(message.guild);
+            guardarMensaje(message);
 
-        if (!config) return;
+            const miembro =
+                message.member;
 
-        guardarMensaje(message);
+            const protegido =
+                miembro &&
+                (
+                    miembro.roles.cache.has(OWNER_ROLE_ID) ||
+                    miembro.roles.cache.has(STAFF_ROLE_ID) ||
+                    miembro.roles.cache.has(MOD_ROLE_ID) ||
+                    miembro.permissions.has(
+                        PermissionFlagsBits.Administrator
+                    )
+                );
 
-        const miembro = message.member;
+            const invitacionDiscord =
+                /(discord\.gg\/|discord\.com\/invite\/|discordapp\.com\/invite\/)/i
+                    .test(message.content || "");
 
-        const protegido =
-            miembro &&
-            (
-                esStaff({
-                    guild: message.guild,
-                    member: miembro,
-                    user: message.author
-                })
-            );
-
-        // =============================================
-        // INVITACIONES
-        // =============================================
-
-        const invitacionDiscord =
-            /(discord\.gg\/|discord\.com\/invite\/|discordapp\.com\/invite\/)/i
-                .test(message.content || "");
-
-        if (invitacionDiscord && !protegido) {
-
-            try {
-                await message.delete();
-            } catch {}
-
-            const aviso =
-                await message.channel.send({
-                    content:
-                        `🚫 ${message.author}, no está permitido enviar invitaciones de otros servidores.`
-                });
-
-            setTimeout(async () => {
+            if (
+                invitacionDiscord &&
+                !protegido
+            ) {
 
                 try {
-                    await aviso.delete();
+                    await message.delete();
                 } catch {}
 
-            }, 5000);
-
-            const embed =
-                new EmbedBuilder()
-                    .setColor(0xED4245)
-                    .setTitle("🔗 INVITACIÓN BLOQUEADA")
-                    .addFields(
-                        {
-                            name: "👤 Usuario",
-                            value: `${message.author}`
-                        },
-                        {
-                            name: "📍 Canal",
-                            value: `${message.channel}`
-                        },
-                        {
-                            name: "🔗 Contenido",
-                            value: "Invitación de Discord detectada."
-                        }
-                    )
-                    .setTimestamp();
-
-            await enviarLog(
-                message.guild,
-                embed
-            );
-
-            return;
-        }
-
-        // =============================================
-        // ANTI-SPAM
-        // =============================================
-
-        if (protegido) return;
-
-        const clave =
-            `${message.guild.id}:${message.author.id}`;
-
-        const ahora = Date.now();
-
-        let datos = spamTracker.get(clave);
-
-        if (!datos) {
-
-            datos = {
-                mensajes: [],
-                castigado: false
-            };
-
-            spamTracker.set(clave, datos);
-        }
-
-        datos.mensajes =
-            datos.mensajes.filter(
-                timestamp =>
-                    ahora - timestamp <= SPAM_WINDOW
-            );
-
-        datos.mensajes.push(ahora);
-
-        if (
-            datos.mensajes.length >=
-            SPAM_MESSAGE_LIMIT &&
-            !datos.castigado
-        ) {
-
-            datos.castigado = true;
-
-            try {
-
-                const mensajes =
-                    await message.channel.messages.fetch({
-                        limit: 20
+                const aviso =
+                    await message.channel.send({
+                        content:
+                            `🚫 ${message.author}, no está permitido enviar invitaciones de otros servidores de Discord.`
                     });
 
-                const spam =
-                    mensajes.filter(msg =>
-                        msg.author.id === message.author.id &&
-                        ahora - msg.createdTimestamp <= SPAM_WINDOW
-                    );
+                setTimeout(
+                    async () => {
+                        try {
+                            await aviso.delete();
+                        } catch {}
+                    },
+                    5000
+                );
 
-                if (spam.size > 0) {
+                const embed =
+                    new EmbedBuilder()
+                        .setColor(0xED4245)
+                        .setTitle(
+                            "🔗 INVITACIÓN DE DISCORD BLOQUEADA"
+                        )
+                        .addFields(
+                            {
+                                name: "👤 Usuario",
+                                value:
+                                    `${message.author}`
+                            },
+                            {
+                                name: "📍 Canal",
+                                value:
+                                    `${message.channel}`
+                            },
+                            {
+                                name: "🔗 Contenido",
+                                value:
+                                    "Invitación de Discord detectada."
+                            }
+                        )
+                        .setTimestamp();
 
-                    await message.channel.bulkDelete(
-                        spam,
-                        true
+                await enviarLog(
+                    message.guild,
+                    embed
+                );
+
+                return;
+            }
+
+            if (protegido) {
+                return;
+            }
+
+            const clave =
+                `${message.guild.id}:${message.author.id}`;
+
+            const ahora =
+                Date.now();
+
+            let datos =
+                spamTracker.get(clave);
+
+            if (!datos) {
+
+                datos = {
+                    mensajes: [],
+                    castigado: false
+                };
+
+                spamTracker.set(
+                    clave,
+                    datos
+                );
+            }
+
+            datos.mensajes =
+                datos.mensajes.filter(
+                    timestamp =>
+                        ahora - timestamp <= SPAM_WINDOW
+                );
+
+            datos.mensajes.push(ahora);
+
+            if (
+                datos.mensajes.length >=
+                SPAM_MESSAGE_LIMIT &&
+                !datos.castigado
+            ) {
+
+                datos.castigado = true;
+
+                try {
+
+                    const mensajes =
+                        await message.channel.messages.fetch({
+                            limit: 20
+                        });
+
+                    const mensajesSpam =
+                        mensajes.filter(msg =>
+                            msg.author.id ===
+                            message.author.id &&
+                            ahora - msg.createdTimestamp <=
+                            SPAM_WINDOW
+                        );
+
+                    if (mensajesSpam.size > 0) {
+
+                        await message.channel.bulkDelete(
+                            mensajesSpam,
+                            true
+                        );
+                    }
+
+                } catch (error) {
+
+                    console.error(
+                        "❌ No se pudieron eliminar mensajes de spam:",
+                        error.message || error
                     );
                 }
 
-            } catch (error) {
-
-                console.error(
-                    "❌ ERROR BORRANDO SPAM:",
-                    error.message || error
-                );
-            }
-
-            try {
-
-                await miembro.timeout(
-                    SPAM_TIMEOUT,
-                    "Anti-spam automático"
-                );
-
-            } catch (error) {
-
-                console.error(
-                    "❌ ERROR TIMEOUT:",
-                    error.message || error
-                );
-            }
-
-            const embed =
-                new EmbedBuilder()
-                    .setColor(0xED4245)
-                    .setTitle("🛡️ ANTI-SPAM ACTIVADO")
-                    .setDescription(
-                        `${message.author} fue detectado enviando demasiados mensajes.`
-                    )
-                    .addFields(
-                        {
-                            name: "👤 Usuario",
-                            value: `${message.author}`
-                        },
-                        {
-                            name: "📊 Límite",
-                            value:
-                                `${SPAM_MESSAGE_LIMIT} mensajes / ${SPAM_WINDOW / 1000}s`
-                        },
-                        {
-                            name: "🔇 Acción",
-                            value:
-                                "Timeout automático de 30 segundos"
-                        }
-                    )
-                    .setTimestamp();
-
-            await enviarLog(
-                message.guild,
-                embed
-            );
-
-            const aviso =
-                await message.channel.send({
-                    content:
-                        `🛡️ ${message.author} fue silenciado durante 30 segundos por spam.`
-                });
-
-            setTimeout(async () => {
-
                 try {
-                    await aviso.delete();
-                } catch {}
 
-            }, 5000);
+                    await miembro.timeout(
+                        SPAM_TIMEOUT,
+                        "Anti-spam automático"
+                    );
 
-            setTimeout(() => {
+                } catch (error) {
 
-                spamTracker.delete(clave);
+                    console.error(
+                        "❌ No se pudo aplicar timeout anti-spam:",
+                        error.message || error
+                    );
+                }
 
-            }, SPAM_WINDOW);
+                const embed =
+                    new EmbedBuilder()
+                        .setColor(0xED4245)
+                        .setTitle(
+                            "🛡️ ANTI-SPAM ACTIVADO"
+                        )
+                        .setDescription(
+                            `${message.author} fue detectado enviando demasiados mensajes en poco tiempo.`
+                        )
+                        .addFields(
+                            {
+                                name: "👤 Usuario",
+                                value:
+                                    `${message.author}`
+                            },
+                            {
+                                name: "📊 Límite",
+                                value:
+                                    `${SPAM_MESSAGE_LIMIT} mensajes / ${SPAM_WINDOW / 1000}s`
+                            },
+                            {
+                                name: "🔇 Acción",
+                                value:
+                                    "Timeout automático de 30 segundos"
+                            },
+                            {
+                                name: "📍 Canal",
+                                value:
+                                    `${message.channel}`
+                            }
+                        )
+                        .setFooter({
+                            text:
+                                "La Orden Morada • Anti-Spam"
+                        })
+                        .setTimestamp();
+
+                await enviarLog(
+                    message.guild,
+                    embed
+                );
+
+                const aviso =
+                    await message.channel.send({
+                        content:
+                            `🛡️ ${message.author} fue silenciado durante 30 segundos por spam.`
+                    });
+
+                setTimeout(
+                    async () => {
+                        try {
+                            await aviso.delete();
+                        } catch {}
+                    },
+                    5000
+                );
+
+                setTimeout(
+                    () => {
+                        spamTracker.delete(clave);
+                    },
+                    SPAM_WINDOW
+                );
+            }
+
+        } catch (error) {
+
+            console.error(
+                "❌ ERROR MESSAGE CREATE:",
+                error.message || error
+            );
         }
-
-    } catch (error) {
-
-        console.error(
-            "❌ ERROR MESSAGE CREATE:",
-            error.message || error
-        );
     }
-});
+);
 
 // =====================================================
 // MENSAJE ELIMINADO
 // =====================================================
 
-client.on("messageDelete", async message => {
+client.on(
+    "messageDelete",
+    async message => {
 
-    try {
+        try {
 
-        if (!message.guild) return;
-        if (message.author?.bot) return;
+            if (!message.guild) return;
+            if (message.author?.bot) return;
 
-        const guardado =
-            messageCache.get(message.id);
+            const guardado =
+                messageCache.get(message.id);
 
-        let texto =
-            message.content ||
-            guardado?.content ||
-            "Contenido no disponible.";
+            let texto =
+                message.content ||
+                guardado?.content ||
+                "Contenido no disponible.";
 
-        if (texto.length > 1000) {
-            texto =
-                texto.substring(0, 997) + "...";
-        }
+            if (texto.length > 1000) {
+                texto =
+                    texto.substring(0, 997) + "...";
+            }
 
-        const autor =
-            message.author ||
-            (
-                guardado?.authorId
-                    ? await client.users.fetch(
-                        guardado.authorId
-                    ).catch(() => null)
-                    : null
+            const autor =
+                message.author ||
+                (
+                    guardado?.authorId
+                        ? await client.users.fetch(
+                            guardado.authorId
+                        ).catch(() => null)
+                        : null
+                );
+
+            const embed =
+                new EmbedBuilder()
+                    .setColor(0xED4245)
+                    .setTitle("🗑️ MENSAJE ELIMINADO")
+                    .addFields(
+                        {
+                            name: "👤 Usuario",
+                            value:
+                                autor
+                                    ? `${autor} \`${autor.tag}\``
+                                    : "Desconocido"
+                        },
+                        {
+                            name: "📍 Canal",
+                            value:
+                                message.channel
+                                    ? `${message.channel}`
+                                    : "Desconocido"
+                        },
+                        {
+                            name: "💬 Mensaje",
+                            value:
+                                `\`\`\`\n${texto}\n\`\`\``
+                        }
+                    )
+                    .setTimestamp();
+
+            if (autor) {
+                embed.setThumbnail(
+                    autor.displayAvatarURL({
+                        extension: "png",
+                        size: 256
+                    })
+                );
+            }
+
+            await enviarLog(
+                message.guild,
+                embed
             );
 
-        const embed =
-            new EmbedBuilder()
-                .setColor(0xED4245)
-                .setTitle("🗑️ MENSAJE ELIMINADO")
-                .addFields(
-                    {
-                        name: "👤 Usuario",
-                        value:
-                            autor
-                                ? `${autor} \`${autor.tag}\``
-                                : "Desconocido"
-                    },
-                    {
-                        name: "📍 Canal",
-                        value:
-                            message.channel
-                                ? `${message.channel}`
-                                : "Desconocido"
-                    },
-                    {
-                        name: "💬 Mensaje",
-                        value:
-                            `\`\`\`\n${texto}\n\`\`\``
-                    }
-                )
-                .setTimestamp();
+            messageCache.delete(
+                message.id
+            );
 
-        if (autor) {
+        } catch (error) {
 
-            embed.setThumbnail(
-                autor.displayAvatarURL({
-                    extension: "png",
-                    size: 256
-                })
+            console.error(
+                "❌ ERROR MESSAGE DELETE:",
+                error.message || error
             );
         }
-
-        await enviarLog(
-            message.guild,
-            embed
-        );
-
-        messageCache.delete(
-            message.id
-        );
-
-    } catch (error) {
-
-        console.error(
-            "❌ ERROR MESSAGE DELETE:",
-            error.message || error
-        );
     }
-});
+);
 
 // =====================================================
 // MENSAJE EDITADO
@@ -1145,7 +1118,9 @@ client.on(
                 newMessage.content ||
                 "";
 
-            if (antes === despues) return;
+            if (antes === despues) {
+                return;
+            }
 
             let textoAntes =
                 antes || "Sin contenido";
@@ -1193,6 +1168,16 @@ client.on(
                     )
                     .setTimestamp();
 
+            if (oldMessage.author) {
+
+                embed.setThumbnail(
+                    oldMessage.author.displayAvatarURL({
+                        extension: "png",
+                        size: 256
+                    })
+                );
+            }
+
             await enviarLog(
                 oldMessage.guild,
                 embed
@@ -1214,56 +1199,59 @@ client.on(
 // BIENVENIDA
 // =====================================================
 
-client.on("guildMemberAdd", async member => {
+client.on(
+    "guildMemberAdd",
+    async member => {
 
-    try {
+        try {
 
-        const config = getConfig(member.guild);
+            const canal =
+                await member.guild.channels.fetch(
+                    WELCOME_CHANNEL_ID
+                );
 
-        if (!config) return;
+            if (!canal || !canal.isTextBased()) {
+                return;
+            }
 
-        const canal =
-            await member.guild.channels.fetch(
-                config.channels.welcome
-            );
+            const avatar =
+                member.displayAvatarURL({
+                    extension: "png",
+                    size: 1024
+                });
 
-        if (!canal || !canal.isTextBased()) return;
+            const embed =
+                new EmbedBuilder()
+                    .setColor(0x8E44AD)
+                    .setTitle(
+                        "🫶︱𝗕𝗜𝗘𝗡𝗩𝗘𝗡𝗜𝗗𝗢𝗦"
+                    )
+                    .setDescription(
+                        `💜 **¡Bienvenido/a ${member} a La Orden Morada!**\n\n` +
+                        "🫶 Esperamos que disfrutes del servidor."
+                    )
+                    .setThumbnail(avatar)
+                    .setImage(avatar)
+                    .setFooter({
+                        text: "La Orden Morada"
+                    })
+                    .setTimestamp();
 
-        const avatar =
-            member.displayAvatarURL({
-                extension: "png",
-                size: 1024
+            await canal.send({
+                content:
+                    `🎉 ¡Bienvenido/a ${member}!`,
+                embeds: [embed]
             });
 
-        const embed =
-            new EmbedBuilder()
-                .setColor(0x8E44AD)
-                .setTitle("🫶︱𝗕𝗜𝗘𝗡𝗩𝗘𝗡𝗜𝗗𝗢𝗦")
-                .setDescription(
-                    `💜 **¡Bienvenido/a ${member} a La Orden Morada!**\n\n` +
-                    "🫶 Esperamos que disfrutes del servidor."
-                )
-                .setThumbnail(avatar)
-                .setImage(avatar)
-                .setFooter({
-                    text: "La Orden Morada"
-                })
-                .setTimestamp();
+        } catch (error) {
 
-        await canal.send({
-            content:
-                `🎉 ¡Bienvenido/a ${member}!`,
-            embeds: [embed]
-        });
-
-    } catch (error) {
-
-        console.error(
-            "❌ ERROR BIENVENIDA:",
-            error.message || error
-        );
+            console.error(
+                "❌ ERROR BIENVENIDA:",
+                error.message || error
+            );
+        }
     }
-});
+);
 
 // =====================================================
 // INTERACCIONES
@@ -1274,32 +1262,6 @@ client.on(
     async interaction => {
 
         try {
-
-            if (!interaction.guild) return;
-
-            const config =
-                getConfig(interaction.guild);
-
-            if (!config) {
-
-                if (
-                    interaction.isChatInputCommand() ||
-                    interaction.isButton()
-                ) {
-
-                    return interaction.reply({
-                        content:
-                            "❌ Este servidor todavía no está configurado en el bot.",
-                        ephemeral: true
-                    });
-                }
-
-                return;
-            }
-
-            // =============================================
-            // VERIFICACIÓN
-            // =============================================
 
             if (
                 interaction.isButton() &&
@@ -1312,21 +1274,21 @@ client.on(
 
                 const rol =
                     await interaction.guild.roles.fetch(
-                        config.roles.verify
+                        VERIFY_ROLE_ID
                     );
 
                 if (!rol) {
 
                     return interaction.reply({
                         content:
-                            "❌ No encontré el rol de verificado configurado para este servidor.",
+                            "❌ No encontré el rol de verificado.",
                         ephemeral: true
                     });
                 }
 
                 if (
                     miembro.roles.cache.has(
-                        config.roles.verify
+                        VERIFY_ROLE_ID
                     )
                 ) {
 
@@ -1390,10 +1352,6 @@ client.on(
                 return;
             }
 
-            // =============================================
-            // CREAR TICKET
-            // =============================================
-
             if (
                 interaction.isButton() &&
                 interaction.customId ===
@@ -1409,7 +1367,7 @@ client.on(
 
                 const categoria =
                     await guild.channels.fetch(
-                        config.ticketCategory
+                        TICKET_CATEGORY_ID
                     );
 
                 if (
@@ -1428,7 +1386,7 @@ client.on(
                     guild.channels.cache.find(
                         canal =>
                             canal.parentId ===
-                            config.ticketCategory &&
+                            TICKET_CATEGORY_ID &&
                             canal.topic ===
                             `ticket:${interaction.user.id}`
                     );
@@ -1447,73 +1405,80 @@ client.on(
                         .replace(/[^a-z0-9-]/g, "")
                         .substring(0, 80);
 
-                const overwrites = [
-
-                    {
-                        id:
-                            guild.roles.everyone.id,
-
-                        deny: [
-                            PermissionFlagsBits.ViewChannel
-                        ]
-                    },
-
-                    {
-                        id:
-                            interaction.user.id,
-
-                        allow: [
-                            PermissionFlagsBits.ViewChannel,
-                            PermissionFlagsBits.SendMessages,
-                            PermissionFlagsBits.ReadMessageHistory,
-                            PermissionFlagsBits.AttachFiles
-                        ]
-                    }
-                ];
-
-                // Roles con acceso al ticket
-                const rolesTicket = [
-                    config.roles.owner,
-                    config.roles.coOwner,
-                    config.roles.admin,
-                    config.roles.adminJunior,
-                    config.roles.staff,
-                    config.roles.mod
-                ];
-
-                for (const roleId of rolesTicket) {
-
-                    if (!roleId) continue;
-
-                    overwrites.push({
-                        id: roleId,
-                        allow: [
-                            PermissionFlagsBits.ViewChannel,
-                            PermissionFlagsBits.SendMessages,
-                            PermissionFlagsBits.ReadMessageHistory,
-                            PermissionFlagsBits.ManageMessages
-                        ]
-                    });
-                }
-
                 const canal =
                     await guild.channels.create({
 
                         name:
-                            nombre ||
-                            `ticket-${interaction.user.id}`,
+                            nombre || `ticket-${interaction.user.id}`,
 
                         type:
                             ChannelType.GuildText,
 
                         parent:
-                            config.ticketCategory,
+                            TICKET_CATEGORY_ID,
 
                         topic:
                             `ticket:${interaction.user.id}`,
 
-                        permissionOverwrites:
-                            overwrites
+                        permissionOverwrites: [
+
+                            {
+                                id:
+                                    guild.roles.everyone.id,
+
+                                deny: [
+                                    PermissionFlagsBits.ViewChannel
+                                ]
+                            },
+
+                            {
+                                id:
+                                    interaction.user.id,
+
+                                allow: [
+                                    PermissionFlagsBits.ViewChannel,
+                                    PermissionFlagsBits.SendMessages,
+                                    PermissionFlagsBits.ReadMessageHistory,
+                                    PermissionFlagsBits.AttachFiles
+                                ]
+                            },
+
+                            {
+                                id:
+                                    STAFF_ROLE_ID,
+
+                                allow: [
+                                    PermissionFlagsBits.ViewChannel,
+                                    PermissionFlagsBits.SendMessages,
+                                    PermissionFlagsBits.ReadMessageHistory,
+                                    PermissionFlagsBits.ManageMessages
+                                ]
+                            },
+
+                            {
+                                id:
+                                    MOD_ROLE_ID,
+
+                                allow: [
+                                    PermissionFlagsBits.ViewChannel,
+                                    PermissionFlagsBits.SendMessages,
+                                    PermissionFlagsBits.ReadMessageHistory,
+                                    PermissionFlagsBits.ManageMessages
+                                ]
+                            },
+
+                            {
+                                id:
+                                    OWNER_ROLE_ID,
+
+                                allow: [
+                                    PermissionFlagsBits.ViewChannel,
+                                    PermissionFlagsBits.SendMessages,
+                                    PermissionFlagsBits.ReadMessageHistory,
+                                    PermissionFlagsBits.ManageMessages
+                                ]
+                            }
+                        ]
                     });
 
                 await canal.send(
@@ -1553,10 +1518,6 @@ client.on(
                 return;
             }
 
-            // =============================================
-            // CERRAR TICKET
-            // =============================================
-
             if (
                 interaction.isButton() &&
                 interaction.customId ===
@@ -1581,7 +1542,7 @@ client.on(
 
                 if (
                     canal.parentId !==
-                    config.ticketCategory
+                    TICKET_CATEGORY_ID
                 ) {
 
                     return interaction.reply({
@@ -1595,7 +1556,7 @@ client.on(
 
                     return interaction.reply({
                         content:
-                            "❌ Solo Staff, Moderadores, Admin u Owner pueden cerrar tickets.",
+                            "❌ Solo Staff, Moderadores u Owner pueden cerrar tickets.",
                         ephemeral: true
                     });
                 }
@@ -1628,40 +1589,33 @@ client.on(
                     embed
                 );
 
-                setTimeout(async () => {
-
-                    try {
-
-                        await canal.delete(
-                            "Ticket cerrado"
-                        );
-
-                    } catch (error) {
-
-                        console.error(
-                            "❌ ERROR ELIMINANDO TICKET:",
-                            error.message || error
-                        );
-                    }
-
-                }, 3000);
+                setTimeout(
+                    async () => {
+                        try {
+                            await canal.delete(
+                                "Ticket cerrado"
+                            );
+                        } catch (error) {
+                            console.error(
+                                "❌ No se pudo eliminar el ticket:",
+                                error.message || error
+                            );
+                        }
+                    },
+                    3000
+                );
 
                 return;
             }
-
-            // =============================================
-            // SLASH COMMANDS
-            // =============================================
 
             if (!interaction.isChatInputCommand()) {
                 return;
             }
 
-            // =============================================
-            // /IP
-            // =============================================
-
-            if (interaction.commandName === "ip") {
+            if (
+                interaction.commandName ===
+                "ip"
+            ) {
 
                 const embed =
                     new EmbedBuilder()
@@ -1695,10 +1649,6 @@ client.on(
                 });
             }
 
-            // =============================================
-            // /CREATE MSJ
-            // =============================================
-
             if (
                 interaction.commandName ===
                 "create"
@@ -1708,7 +1658,7 @@ client.on(
 
                     return interaction.reply({
                         content:
-                            "❌ Solo Owner puede usar este comando.",
+                            "❌ Solo el Owner puede utilizar este comando.",
                         ephemeral: true
                     });
                 }
@@ -1731,7 +1681,7 @@ client.on(
 
                     return interaction.reply({
                         content:
-                            "❌ Máximo 4096 caracteres.",
+                            "❌ El texto no puede superar los 4096 caracteres.",
                         ephemeral: true
                     });
                 }
@@ -1752,14 +1702,10 @@ client.on(
 
                 return interaction.reply({
                     content:
-                        "✅ Mensaje creado.",
+                        "✅ Mensaje creado correctamente.",
                     ephemeral: true
                 });
             }
-
-            // =============================================
-            // COMANDOS STAFF
-            // =============================================
 
             const comandosStaff = [
                 "ban",
@@ -1777,20 +1723,18 @@ client.on(
             if (
                 comandosStaff.includes(
                     interaction.commandName
-                ) &&
-                !esStaff(interaction)
+                )
             ) {
 
-                return interaction.reply({
-                    content:
-                        "❌ No tenés permisos para utilizar este comando.",
-                    ephemeral: true
-                });
-            }
+                if (!esStaff(interaction)) {
 
-            // =============================================
-            // WARN
-            // =============================================
+                    return interaction.reply({
+                        content:
+                            "❌ No tenés permisos para utilizar este comando.",
+                        ephemeral: true
+                    });
+                }
+            }
 
             if (
                 interaction.commandName ===
@@ -1821,7 +1765,7 @@ client.on(
 
                     return interaction.reply({
                         content:
-                            "❌ No podés moderar a un usuario con rol igual o superior.",
+                            "❌ No podés moderar a un usuario con un rol igual o superior al tuyo.",
                         ephemeral: true
                     });
                 }
@@ -1887,10 +1831,6 @@ client.on(
                 return;
             }
 
-            // =============================================
-            // WARNINGS
-            // =============================================
-
             if (
                 interaction.commandName ===
                 "warnings"
@@ -1917,10 +1857,12 @@ client.on(
                 }
 
                 const texto =
-                    lista.map(
-                        (warn, index) =>
-                            `**${index + 1}.** ${warn.motivo}\n<@${warn.moderador}> • <t:${Math.floor(warn.fecha / 1000)}:R>`
-                    ).join("\n\n");
+                    lista
+                        .map(
+                            (warn, index) =>
+                                `**${index + 1}.** ${warn.motivo}\n<@${warn.moderador}> • <t:${Math.floor(warn.fecha / 1000)}:R>`
+                        )
+                        .join("\n\n");
 
                 const embed =
                     new EmbedBuilder()
@@ -1938,10 +1880,6 @@ client.on(
                     ephemeral: true
                 });
             }
-
-            // =============================================
-            // CLEAR
-            // =============================================
 
             if (
                 interaction.commandName ===
@@ -1978,9 +1916,7 @@ client.on(
                 const embed =
                     new EmbedBuilder()
                         .setColor(0x57F287)
-                        .setTitle(
-                            "🧹 MENSAJES ELIMINADOS"
-                        )
+                        .setTitle("🧹 MENSAJES ELIMINADOS")
                         .addFields(
                             {
                                 name: "📊 Cantidad",
@@ -1991,6 +1927,11 @@ client.on(
                                 name: "🛡️ Moderador",
                                 value:
                                     `${interaction.user}`
+                            },
+                            {
+                                name: "📍 Canal",
+                                value:
+                                    `${interaction.channel}`
                             }
                         )
                         .setTimestamp();
@@ -2007,10 +1948,6 @@ client.on(
                 return;
             }
 
-            // =============================================
-            // SLOWMODE
-            // =============================================
-
             if (
                 interaction.commandName ===
                 "slowmode"
@@ -2021,10 +1958,10 @@ client.on(
                         "tiempo"
                     );
 
-                const tiempo =
+                const segundos =
                     convertirDuracion(entrada);
 
-                if (tiempo === null) {
+                if (segundos === null) {
 
                     return interaction.reply({
                         content:
@@ -2033,12 +1970,14 @@ client.on(
                     });
                 }
 
-                const segundos =
-                    Math.floor(tiempo / 1000);
+                const segundosFinal =
+                    Math.floor(
+                        segundos / 1000
+                    );
 
                 if (
-                    segundos < 0 ||
-                    segundos > 21600
+                    segundosFinal < 0 ||
+                    segundosFinal > 21600
                 ) {
 
                     return interaction.reply({
@@ -2056,24 +1995,22 @@ client.on(
 
                     return interaction.reply({
                         content:
-                            "❌ Este canal no permite slowmode.",
+                            "❌ Este canal no permite configurar slowmode.",
                         ephemeral: true
                     });
                 }
 
                 await interaction.channel.setRateLimitPerUser(
-                    segundos,
+                    segundosFinal,
                     `Slowmode por ${interaction.user.tag}`
                 );
 
                 const embed =
                     new EmbedBuilder()
                         .setColor(0x5865F2)
-                        .setTitle(
-                            "🐢 SLOWMODE CONFIGURADO"
-                        )
+                        .setTitle("🐢 SLOWMODE CONFIGURADO")
                         .setDescription(
-                            `Slowmode configurado en **${segundos} segundos**.`
+                            `El slowmode de este canal ahora es de **${segundosFinal} segundos**.`
                         )
                         .addFields({
                             name: "🛡️ Configurado por",
@@ -2093,10 +2030,6 @@ client.on(
 
                 return;
             }
-
-            // =============================================
-            // BAN
-            // =============================================
 
             if (
                 interaction.commandName ===
@@ -2122,14 +2055,14 @@ client.on(
 
                     return interaction.reply({
                         content:
-                            "❌ No podés banear a este usuario por su jerarquía.",
+                            "❌ No podés banear a un usuario con un rol igual o superior al tuyo.",
                         ephemeral: true
                     });
                 }
 
                 await miembro.ban({
                     reason:
-                        `Ban por ${interaction.user.tag}`
+                        `Ban aplicado por ${interaction.user.tag}`
                 });
 
                 const embed =
@@ -2139,7 +2072,7 @@ client.on(
                             "🔨 USUARIO BANEADO"
                         )
                         .setDescription(
-                            `${usuario} fue baneado.`
+                            `${usuario} fue baneado del servidor.`
                         )
                         .addFields(
                             {
@@ -2172,10 +2105,6 @@ client.on(
                 return;
             }
 
-            // =============================================
-            // MUTE
-            // =============================================
-
             if (
                 interaction.commandName ===
                 "mute"
@@ -2205,15 +2134,24 @@ client.on(
 
                     return interaction.reply({
                         content:
-                            "❌ No podés mutear a este usuario.",
+                            "❌ No podés mutear a un usuario con un rol igual o superior al tuyo.",
                         ephemeral: true
                     });
                 }
 
                 const tiempo =
-                    convertirDuracion(
-                        duracion
-                    );
+                    convertirDuracion(duracion);
+
+                if (
+                    tiempo === null
+                ) {
+
+                    return interaction.reply({
+                        content:
+                            "❌ Usa `30s`, `5m`, `1h` o `1d`.",
+                        ephemeral: true
+                    });
+                }
 
                 const maximo =
                     28 *
@@ -2223,7 +2161,6 @@ client.on(
                     1000;
 
                 if (
-                    tiempo === null ||
                     tiempo <= 0 ||
                     tiempo > maximo
                 ) {
@@ -2237,7 +2174,7 @@ client.on(
 
                 await miembro.timeout(
                     tiempo,
-                    `Mute por ${interaction.user.tag}`
+                    `Mute aplicado por ${interaction.user.tag}`
                 );
 
                 const embed =
@@ -2247,7 +2184,7 @@ client.on(
                             "🔇 USUARIO SILENCIADO"
                         )
                         .setDescription(
-                            `${usuario} fue silenciado.`
+                            `${usuario} fue silenciado correctamente.`
                         )
                         .addFields(
                             {
@@ -2280,10 +2217,6 @@ client.on(
                 return;
             }
 
-            // =============================================
-            // UNMUTE
-            // =============================================
-
             if (
                 interaction.commandName ===
                 "unmute"
@@ -2308,14 +2241,14 @@ client.on(
 
                     return interaction.reply({
                         content:
-                            "❌ No podés modificar a este usuario.",
+                            "❌ No podés modificar a este usuario por su jerarquía.",
                         ephemeral: true
                     });
                 }
 
                 await miembro.timeout(
                     null,
-                    `Unmute por ${interaction.user.tag}`
+                    `Mute quitado por ${interaction.user.tag}`
                 );
 
                 const embed =
@@ -2326,6 +2259,18 @@ client.on(
                         )
                         .setDescription(
                             `${usuario} ya puede volver a hablar.`
+                        )
+                        .addFields(
+                            {
+                                name: "👤 Usuario",
+                                value:
+                                    `${usuario}`
+                            },
+                            {
+                                name: "🛡️ Moderador",
+                                value:
+                                    `${interaction.user}`
+                            }
                         )
                         .setTimestamp();
 
@@ -2340,10 +2285,6 @@ client.on(
 
                 return;
             }
-
-            // =============================================
-            // UNBAN
-            // =============================================
 
             if (
                 interaction.commandName ===
@@ -2359,14 +2300,14 @@ client.on(
 
                     return interaction.reply({
                         content:
-                            "❌ La ID no es válida.",
+                            "❌ La ID de Discord no es válida.",
                         ephemeral: true
                     });
                 }
 
                 await interaction.guild.members.unban(
                     id,
-                    `Unban por ${interaction.user.tag}`
+                    `Unban realizado por ${interaction.user.tag}`
                 );
 
                 const embed =
@@ -2376,7 +2317,19 @@ client.on(
                             "🔓 USUARIO DESBANEADO"
                         )
                         .setDescription(
-                            `El usuario \`${id}\` fue desbaneado.`
+                            `El usuario con ID \`${id}\` fue desbaneado.`
+                        )
+                        .addFields(
+                            {
+                                name: "🆔 ID",
+                                value:
+                                    id
+                            },
+                            {
+                                name: "🛡️ Moderador",
+                                value:
+                                    `${interaction.user}`
+                            }
                         )
                         .setTimestamp();
 
@@ -2392,29 +2345,43 @@ client.on(
                 return;
             }
 
-            // =============================================
-            // LOCK
-            // =============================================
-
             if (
                 interaction.commandName ===
                 "lock"
             ) {
 
-                const sub =
+                const subcomando =
                     interaction.options.getSubcommand();
 
                 await interaction.deferReply();
 
-                if (sub === "canal") {
+                if (
+                    subcomando ===
+                    "canal"
+                ) {
 
                     const canal =
                         interaction.channel;
+
+                    if (
+                        !canal ||
+                        !canal.permissionOverwrites
+                    ) {
+
+                        return interaction.editReply({
+                            content:
+                                "❌ Este canal no puede bloquearse."
+                        });
+                    }
 
                     await canal.permissionOverwrites.edit(
                         interaction.guild.roles.everyone,
                         {
                             SendMessages: false
+                        },
+                        {
+                            reason:
+                                `Lock por ${interaction.user.tag}`
                         }
                     );
 
@@ -2425,8 +2392,13 @@ client.on(
                                 "🔒 CANAL BLOQUEADO"
                             )
                             .setDescription(
-                                "Los usuarios no pueden enviar mensajes."
+                                "🚫 Los usuarios no pueden enviar mensajes en este canal."
                             )
+                            .addFields({
+                                name: "🛡️ Bloqueado por",
+                                value:
+                                    `${interaction.user}`
+                            })
                             .setTimestamp();
 
                     await interaction.editReply({
@@ -2441,12 +2413,15 @@ client.on(
                     return;
                 }
 
-                if (sub === "general") {
+                if (
+                    subcomando ===
+                    "general"
+                ) {
 
                     const canales =
                         await interaction.guild.channels.fetch();
 
-                    let cantidad = 0;
+                    let bloqueados = 0;
 
                     for (
                         const [, canal]
@@ -2459,7 +2434,9 @@ client.on(
                                 ChannelType.GuildText,
                                 ChannelType.GuildAnnouncement
                             ].includes(canal.type)
-                        ) continue;
+                        ) {
+                            continue;
+                        }
 
                         try {
 
@@ -2467,12 +2444,22 @@ client.on(
                                 interaction.guild.roles.everyone,
                                 {
                                     SendMessages: false
+                                },
+                                {
+                                    reason:
+                                        `Lock general por ${interaction.user.tag}`
                                 }
                             );
 
-                            cantidad++;
+                            bloqueados++;
 
-                        } catch {}
+                        } catch (error) {
+
+                            console.error(
+                                `❌ No se pudo bloquear #${canal.name}:`,
+                                error.message || error
+                            );
+                        }
                     }
 
                     const embed =
@@ -2482,7 +2469,19 @@ client.on(
                                 "🔒 SERVIDOR BLOQUEADO"
                             )
                             .setDescription(
-                                `Se bloquearon **${cantidad} canales**.`
+                                "🚨 Se realizó un bloqueo general."
+                            )
+                            .addFields(
+                                {
+                                    name: "📊 Canales bloqueados",
+                                    value:
+                                        `${bloqueados}`
+                                },
+                                {
+                                    name: "🛡️ Bloqueado por",
+                                    value:
+                                        `${interaction.user}`
+                                }
                             )
                             .setTimestamp();
 
@@ -2499,29 +2498,43 @@ client.on(
                 }
             }
 
-            // =============================================
-            // UNLOCK
-            // =============================================
-
             if (
                 interaction.commandName ===
                 "unlock"
             ) {
 
-                const sub =
+                const subcomando =
                     interaction.options.getSubcommand();
 
                 await interaction.deferReply();
 
-                if (sub === "canal") {
+                if (
+                    subcomando ===
+                    "canal"
+                ) {
 
                     const canal =
                         interaction.channel;
+
+                    if (
+                        !canal ||
+                        !canal.permissionOverwrites
+                    ) {
+
+                        return interaction.editReply({
+                            content:
+                                "❌ Este canal no puede desbloquearse."
+                        });
+                    }
 
                     await canal.permissionOverwrites.edit(
                         interaction.guild.roles.everyone,
                         {
                             SendMessages: null
+                        },
+                        {
+                            reason:
+                                `Unlock por ${interaction.user.tag}`
                         }
                     );
 
@@ -2531,6 +2544,14 @@ client.on(
                             .setTitle(
                                 "🔓 CANAL DESBLOQUEADO"
                             )
+                            .setDescription(
+                                "🟢 El canal volvió a utilizar sus permisos normales."
+                            )
+                            .addFields({
+                                name: "🛡️ Desbloqueado por",
+                                value:
+                                    `${interaction.user}`
+                            })
                             .setTimestamp();
 
                     await interaction.editReply({
@@ -2545,12 +2566,15 @@ client.on(
                     return;
                 }
 
-                if (sub === "general") {
+                if (
+                    subcomando ===
+                    "general"
+                ) {
 
                     const canales =
                         await interaction.guild.channels.fetch();
 
-                    let cantidad = 0;
+                    let desbloqueados = 0;
 
                     for (
                         const [, canal]
@@ -2563,7 +2587,9 @@ client.on(
                                 ChannelType.GuildText,
                                 ChannelType.GuildAnnouncement
                             ].includes(canal.type)
-                        ) continue;
+                        ) {
+                            continue;
+                        }
 
                         try {
 
@@ -2571,12 +2597,22 @@ client.on(
                                 interaction.guild.roles.everyone,
                                 {
                                     SendMessages: null
+                                },
+                                {
+                                    reason:
+                                        `Unlock general por ${interaction.user.tag}`
                                 }
                             );
 
-                            cantidad++;
+                            desbloqueados++;
 
-                        } catch {}
+                        } catch (error) {
+
+                            console.error(
+                                `❌ No se pudo desbloquear #${canal.name}:`,
+                                error.message || error
+                            );
+                        }
                     }
 
                     const embed =
@@ -2586,7 +2622,19 @@ client.on(
                                 "🔓 SERVIDOR DESBLOQUEADO"
                             )
                             .setDescription(
-                                `Se desbloquearon **${cantidad} canales**.`
+                                "🟢 Se realizó el desbloqueo general."
+                            )
+                            .addFields(
+                                {
+                                    name: "📊 Canales desbloqueados",
+                                    value:
+                                        `${desbloqueados}`
+                                },
+                                {
+                                    name: "🛡️ Desbloqueado por",
+                                    value:
+                                        `${interaction.user}`
+                                }
                             )
                             .setTimestamp();
 
@@ -2606,7 +2654,7 @@ client.on(
         } catch (error) {
 
             console.error(
-                "❌ ERROR INTERACCIÓN:",
+                "❌ ERROR DEL BOT:",
                 error
             );
 
@@ -2619,14 +2667,14 @@ client.on(
 
                     await interaction.editReply({
                         content:
-                            "❌ Ocurrió un error al ejecutar la acción."
+                            "❌ Ocurrió un error al ejecutar el comando."
                     });
 
                 } else {
 
                     await interaction.reply({
                         content:
-                            "❌ Ocurrió un error al ejecutar la acción.",
+                            "❌ Ocurrió un error al ejecutar el comando.",
                         ephemeral: true
                     });
                 }
@@ -2637,29 +2685,36 @@ client.on(
 );
 
 // =====================================================
-// ERRORES
+// ERRORES DEL CLIENTE
 // =====================================================
 
-client.on("error", error => {
+client.on(
+    "error",
+    error => {
+        console.error(
+            "❌ ERROR DEL CLIENTE DISCORD:",
+            error
+        );
+    }
+);
 
-    console.error(
-        "❌ ERROR DEL CLIENTE:",
-        error
-    );
-});
+client.on(
+    "warn",
+    warning => {
+        console.warn(
+            "⚠️ DISCORD:",
+            warning
+        );
+    }
+);
 
-client.on("warn", warning => {
-
-    console.warn(
-        "⚠️ DISCORD:",
-        warning
-    );
-});
+// =====================================================
+// PROCESO
+// =====================================================
 
 process.on(
     "unhandledRejection",
     error => {
-
         console.error(
             "❌ UNHANDLED REJECTION:",
             error
@@ -2670,7 +2725,6 @@ process.on(
 process.on(
     "uncaughtException",
     error => {
-
         console.error(
             "❌ UNCAUGHT EXCEPTION:",
             error
@@ -2679,13 +2733,17 @@ process.on(
 );
 
 // =====================================================
-// TOKEN
+// COMPROBAR TOKEN
 // =====================================================
 
 if (!TOKEN) {
 
     console.error(
-        "❌ ERROR: Falta DISCORD_TOKEN."
+        "❌ ERROR: No existe la variable DISCORD_TOKEN."
+    );
+
+    console.error(
+        "👉 En Wisbyte tenés que crear una variable de entorno llamada DISCORD_TOKEN con el token de tu bot."
     );
 
     process.exit(1);
@@ -2702,7 +2760,7 @@ if (!TOKEN) {
         await registrarComandos();
 
         console.log(
-            "🔐 Iniciando sesión..."
+            "🔐 Iniciando sesión en Discord..."
         );
 
         await client.login(TOKEN);
@@ -2713,7 +2771,9 @@ if (!TOKEN) {
             "❌ NO SE PUDO INICIAR EL BOT:"
         );
 
-        console.error(error);
+        console.error(
+            error
+        );
 
         process.exit(1);
     }
