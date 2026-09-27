@@ -17,11 +17,11 @@ const path = require("path");
 const http = require("http");
 
 // =====================================================
-// CONFIGURACIÓN
+// CONFIG
 // =====================================================
 
-const CLIENT_ID = "1552817688378605650";
 const TOKEN = process.env.DISCORD_TOKEN;
+const CLIENT_ID = "1552817688378605650";
 const PORT = Number(process.env.PORT) || 10000;
 
 const DATA_FILE = path.join(__dirname, "data.json");
@@ -59,13 +59,13 @@ function crearConfig() {
             enabled: false,
             title: "🛡️ VERIFICACIÓN",
             message:
-                "¡Bienvenido/a a **{servidor}**!\n\nPresioná el botón de abajo para verificarte."
+                "¡Bienvenido/a a **{servidor}**!\n\nPresioná el botón para verificarte."
         },
 
         ticket: {
             title: "🎫 SOPORTE",
             message:
-                "¿Necesitás ayuda en **{servidor}**?\n\nPresioná el botón para crear un ticket privado."
+                "¿Necesitás ayuda en **{servidor}**?\n\nPresioná el botón para abrir un ticket."
         },
 
         ip: {
@@ -101,11 +101,7 @@ function cargarDatos() {
             ? JSON.parse(contenido)
             : {};
     } catch (error) {
-        console.error(
-            "❌ Error leyendo data.json:",
-            error
-        );
-
+        console.error("❌ Error leyendo data.json:", error);
         database = {};
     }
 }
@@ -117,10 +113,7 @@ function guardarDatos() {
             JSON.stringify(database, null, 4)
         );
     } catch (error) {
-        console.error(
-            "❌ Error guardando data.json:",
-            error
-        );
+        console.error("❌ Error guardando data.json:", error);
     }
 }
 
@@ -158,23 +151,18 @@ function obtenerConfig(guildId) {
         "🎉 ¡Bienvenido/a {usuario} a **{servidor}**!";
 
     config.verification.enabled ??= false;
-    config.verification.title ??=
-        "🛡️ VERIFICACIÓN";
-
+    config.verification.title ??= "🛡️ VERIFICACIÓN";
     config.verification.message ??=
-        "¡Bienvenido/a a **{servidor}**!\n\nPresioná el botón de abajo para verificarte.";
+        "¡Bienvenido/a a **{servidor}**!\n\nPresioná el botón para verificarte.";
 
     config.ticket.title ??= "🎫 SOPORTE";
-
     config.ticket.message ??=
-        "¿Necesitás ayuda en **{servidor}**?\n\nPresioná el botón para crear un ticket privado.";
+        "¿Necesitás ayuda en **{servidor}**?\n\nPresioná el botón para abrir un ticket.";
 
     config.ip.enabled ??= false;
     config.ip.address ??= null;
     config.ip.port ??= null;
-    config.ip.title ??=
-        "🎮 SERVIDOR DE MINECRAFT";
-
+    config.ip.title ??= "🎮 SERVIDOR DE MINECRAFT";
     config.ip.message ??=
         "Conectate a nuestro servidor utilizando los siguientes datos:";
 
@@ -184,7 +172,7 @@ function obtenerConfig(guildId) {
 cargarDatos();
 
 // =====================================================
-// VARIABLES
+// UTILIDADES
 // =====================================================
 
 function reemplazarVariables(texto, datos = {}) {
@@ -197,16 +185,10 @@ function reemplazarVariables(texto, datos = {}) {
         .replaceAll("{puerto}", String(datos.puerto || ""));
 }
 
-// =====================================================
-// DURACIONES
-// =====================================================
-
 function convertirDuracion(texto) {
     if (!texto) return null;
 
-    const match = texto
-        .trim()
-        .match(/^(\d+)\s*(s|m|h|d)$/i);
+    const match = texto.trim().match(/^(\d+)\s*(s|m|h|d)$/i);
 
     if (!match) return null;
 
@@ -224,7 +206,7 @@ function convertirDuracion(texto) {
 }
 
 // =====================================================
-// CLIENTE
+// CLIENT
 // =====================================================
 
 const client = new Client({
@@ -237,7 +219,7 @@ const client = new Client({
 });
 
 // =====================================================
-// SERVIDOR HTTP
+// HTTP
 // =====================================================
 
 const server = http.createServer((req, res) => {
@@ -257,11 +239,11 @@ server.listen(PORT, "0.0.0.0", () => {
 // =====================================================
 
 function esOwner(interaction) {
-    if (!interaction.guild) return false;
+    if (!interaction.guild || !interaction.member) {
+        return false;
+    }
 
-    const config = obtenerConfig(
-        interaction.guild.id
-    );
+    const config = obtenerConfig(interaction.guild.id);
 
     return (
         interaction.guild.ownerId === interaction.user.id ||
@@ -278,11 +260,11 @@ function esOwner(interaction) {
 }
 
 function esStaff(interaction) {
-    if (!interaction.guild) return false;
+    if (!interaction.guild || !interaction.member) {
+        return false;
+    }
 
-    const config = obtenerConfig(
-        interaction.guild.id
-    );
+    const config = obtenerConfig(interaction.guild.id);
 
     return (
         esOwner(interaction) ||
@@ -302,19 +284,15 @@ function esStaff(interaction) {
 }
 
 function puedeModerar(interaction, miembro) {
-    if (!miembro) return false;
+    if (!miembro || !interaction.member) {
+        return false;
+    }
 
-    if (
-        interaction.guild.ownerId ===
-        interaction.user.id
-    ) {
+    if (interaction.guild.ownerId === interaction.user.id) {
         return true;
     }
 
-    if (
-        miembro.id ===
-        interaction.guild.ownerId
-    ) {
+    if (miembro.id === interaction.guild.ownerId) {
         return false;
     }
 
@@ -680,7 +658,7 @@ const commands = [
         .addStringOption(opt =>
             opt
                 .setName("id")
-                .setDescription("ID.")
+                .setDescription("ID del usuario.")
                 .setRequired(true)
         ),
 
@@ -771,30 +749,25 @@ const commands = [
 // REGISTRO GLOBAL
 // =====================================================
 
-const rest = new REST({
-    version: "10"
-}).setToken(TOKEN);
-
 async function registrarComandos() {
-    try {
-        console.log("🔄 Registrando comandos globalmente...");
-
-        await rest.put(
-            Routes.applicationCommands(CLIENT_ID),
-            {
-                body: commands
-            }
-        );
-
-        console.log(
-            "✅ Comandos registrados globalmente."
-        );
-    } catch (error) {
-        console.error(
-            "❌ Error registrando comandos:",
-            error
-        );
+    if (!TOKEN) {
+        throw new Error("Falta DISCORD_TOKEN");
     }
+
+    const rest = new REST({
+        version: "10"
+    }).setToken(TOKEN);
+
+    console.log("🔄 Registrando comandos globalmente...");
+
+    await rest.put(
+        Routes.applicationCommands(CLIENT_ID),
+        {
+            body: commands
+        }
+    );
+
+    console.log("✅ Comandos globales registrados.");
 }
 
 // =====================================================
@@ -804,13 +777,8 @@ async function registrarComandos() {
 client.once("clientReady", () => {
     console.log("==================================");
     console.log(`✅ BOT: ${client.user.tag}`);
-    console.log(
-        `🏠 SERVIDORES: ${client.guilds.cache.size}`
-    );
-    console.log("🌎 MODO: TODOS LOS SERVIDORES");
-    console.log("🎫 Tickets: ACTIVADOS");
-    console.log("🛡️ Verificación: ACTIVADA");
-    console.log("👋 Bienvenidas: ACTIVADAS");
+    console.log(`🏠 SERVIDORES: ${client.guilds.cache.size}`);
+    console.log("🌎 COMANDOS: GLOBALES");
     console.log("==================================");
 });
 
@@ -820,9 +788,7 @@ client.once("clientReady", () => {
 
 client.on("guildMemberAdd", async member => {
     try {
-        const config = obtenerConfig(
-            member.guild.id
-        );
+        const config = obtenerConfig(member.guild.id);
 
         if (
             !config.welcome.enabled ||
@@ -865,10 +831,7 @@ client.on("guildMemberAdd", async member => {
             embeds: [embed]
         });
     } catch (error) {
-        console.error(
-            "❌ Error bienvenida:",
-            error
-        );
+        console.error("❌ Error bienvenida:", error);
     }
 });
 
@@ -894,14 +857,9 @@ client.on("interactionCreate", async interaction => {
             const guild = interaction.guild;
             const config = obtenerConfig(guild.id);
 
-            // -----------------------------
             // VERIFICAR
-            // -----------------------------
 
-            if (
-                interaction.customId ===
-                "verificar_usuario"
-            ) {
+            if (interaction.customId === "verificar_usuario") {
                 if (!config.roles.verify) {
                     return interaction.reply({
                         content:
@@ -924,9 +882,7 @@ client.on("interactionCreate", async interaction => {
 
                 const miembro = interaction.member;
 
-                if (
-                    miembro.roles.cache.has(rol.id)
-                ) {
+                if (miembro.roles.cache.has(rol.id)) {
                     return interaction.reply({
                         content:
                             "✅ Ya estás verificado.",
@@ -938,12 +894,11 @@ client.on("interactionCreate", async interaction => {
 
                 if (
                     !bot ||
-                    rol.position >=
-                        bot.roles.highest.position
+                    rol.position >= bot.roles.highest.position
                 ) {
                     return interaction.reply({
                         content:
-                            "❌ El rol de verificación debe estar debajo del rol más alto del bot.",
+                            "❌ El rol debe estar debajo del rol más alto del bot.",
                         ephemeral: true
                     });
                 }
@@ -960,14 +915,9 @@ client.on("interactionCreate", async interaction => {
                 });
             }
 
-            // -----------------------------
             // CREAR TICKET
-            // -----------------------------
 
-            if (
-                interaction.customId ===
-                "crear_ticket"
-            ) {
+            if (interaction.customId === "crear_ticket") {
                 await interaction.deferReply({
                     ephemeral: true
                 });
@@ -979,15 +929,13 @@ client.on("interactionCreate", async interaction => {
                     });
                 }
 
-                const categoria =
-                    await guild.channels.fetch(
-                        config.tickets.category
-                    );
+                const categoria = await guild.channels.fetch(
+                    config.tickets.category
+                );
 
                 if (
                     !categoria ||
-                    categoria.type !==
-                        ChannelType.GuildCategory
+                    categoria.type !== ChannelType.GuildCategory
                 ) {
                     return interaction.editReply({
                         content:
@@ -1014,45 +962,35 @@ client.on("interactionCreate", async interaction => {
                 const nombre =
                     `ticket-${interaction.user.username}`
                         .toLowerCase()
-                        .replace(
-                            /[^a-z0-9-]/g,
-                            ""
-                        )
+                        .replace(/[^a-z0-9-]/g, "")
                         .substring(0, 70);
 
-                const canal =
-                    await guild.channels.create({
-                        name:
-                            nombre ||
-                            `ticket-${interaction.user.id}`,
-
-                        type: ChannelType.GuildText,
-
-                        parent: config.tickets.category,
-
-                        topic:
-                            `ticket:${interaction.user.id}`,
-
-                        permissionOverwrites: [
-                            {
-                                id:
-                                    guild.roles.everyone.id,
-                                deny: [
-                                    PermissionFlagsBits.ViewChannel
-                                ]
-                            },
-                            {
-                                id:
-                                    interaction.user.id,
-                                allow: [
-                                    PermissionFlagsBits.ViewChannel,
-                                    PermissionFlagsBits.SendMessages,
-                                    PermissionFlagsBits.ReadMessageHistory,
-                                    PermissionFlagsBits.AttachFiles
-                                ]
-                            }
-                        ]
-                    });
+                const canal = await guild.channels.create({
+                    name:
+                        nombre ||
+                        `ticket-${interaction.user.id}`,
+                    type: ChannelType.GuildText,
+                    parent: config.tickets.category,
+                    topic:
+                        `ticket:${interaction.user.id}`,
+                    permissionOverwrites: [
+                        {
+                            id: guild.roles.everyone.id,
+                            deny: [
+                                PermissionFlagsBits.ViewChannel
+                            ]
+                        },
+                        {
+                            id: interaction.user.id,
+                            allow: [
+                                PermissionFlagsBits.ViewChannel,
+                                PermissionFlagsBits.SendMessages,
+                                PermissionFlagsBits.ReadMessageHistory,
+                                PermissionFlagsBits.AttachFiles
+                            ]
+                        }
+                    ]
+                });
 
                 const roles = [
                     config.roles.owner,
@@ -1075,9 +1013,7 @@ client.on("interactionCreate", async interaction => {
                 }
 
                 await canal.send(
-                    mensajeTicket(
-                        interaction.member
-                    )
+                    mensajeTicket(interaction.member)
                 );
 
                 return interaction.editReply({
@@ -1086,21 +1022,14 @@ client.on("interactionCreate", async interaction => {
                 });
             }
 
-            // -----------------------------
             // CERRAR TICKET
-            // -----------------------------
 
-            if (
-                interaction.customId ===
-                "cerrar_ticket"
-            ) {
-                const canal =
-                    interaction.channel;
+            if (interaction.customId === "cerrar_ticket") {
+                const canal = interaction.channel;
 
                 if (
                     !canal ||
-                    canal.type !==
-                        ChannelType.GuildText
+                    canal.type !== ChannelType.GuildText
                 ) {
                     return interaction.reply({
                         content:
@@ -1129,8 +1058,7 @@ client.on("interactionCreate", async interaction => {
                 }
 
                 await interaction.reply({
-                    content:
-                        "🔒 Cerrando ticket..."
+                    content: "🔒 Cerrando ticket..."
                 });
 
                 setTimeout(async () => {
@@ -1155,12 +1083,13 @@ client.on("interactionCreate", async interaction => {
             return;
         }
 
-        // ESTA ES LA ÚNICA COMPROBACIÓN
-        // NECESARIA PARA COMANDOS DE SERVIDOR.
+        // Los comandos con setDMPermission(false)
+        // solo pueden ejecutarse en servidores.
+
         if (!interaction.guild) {
             return interaction.reply({
                 content:
-                    "❌ Este comando debe utilizarse dentro de un servidor.",
+                    "❌ Este comando solo puede utilizarse dentro de un servidor.",
                 ephemeral: true
             });
         }
@@ -1172,10 +1101,7 @@ client.on("interactionCreate", async interaction => {
         // SETUP
         // =================================================
 
-        if (
-            interaction.commandName ===
-            "setup"
-        ) {
+        if (interaction.commandName === "setup") {
             if (
                 !interaction.member.permissions.has(
                     PermissionFlagsBits.Administrator
@@ -1193,15 +1119,10 @@ client.on("interactionCreate", async interaction => {
 
             if (sub === "bienvenida") {
                 const canal =
-                    interaction.options.getChannel(
-                        "canal"
-                    );
+                    interaction.options.getChannel("canal");
 
-                config.channels.welcome =
-                    canal.id;
-
-                config.welcome.enabled =
-                    true;
+                config.channels.welcome = canal.id;
+                config.welcome.enabled = true;
 
                 guardarDatos();
 
@@ -1214,23 +1135,14 @@ client.on("interactionCreate", async interaction => {
 
             if (sub === "verificacion") {
                 const canal =
-                    interaction.options.getChannel(
-                        "canal"
-                    );
+                    interaction.options.getChannel("canal");
 
                 const rol =
-                    interaction.options.getRole(
-                        "rol"
-                    );
+                    interaction.options.getRole("rol");
 
-                config.channels.verify =
-                    canal.id;
-
-                config.roles.verify =
-                    rol.id;
-
-                config.verification.enabled =
-                    true;
+                config.channels.verify = canal.id;
+                config.roles.verify = rol.id;
+                config.verification.enabled = true;
 
                 guardarDatos();
 
@@ -1243,12 +1155,9 @@ client.on("interactionCreate", async interaction => {
 
             if (sub === "logs") {
                 const canal =
-                    interaction.options.getChannel(
-                        "canal"
-                    );
+                    interaction.options.getChannel("canal");
 
-                config.channels.logs =
-                    canal.id;
+                config.channels.logs = canal.id;
 
                 guardarDatos();
 
@@ -1261,20 +1170,13 @@ client.on("interactionCreate", async interaction => {
 
             if (sub === "tickets") {
                 const canal =
-                    interaction.options.getChannel(
-                        "canal"
-                    );
+                    interaction.options.getChannel("canal");
 
                 const categoria =
-                    interaction.options.getChannel(
-                        "categoria"
-                    );
+                    interaction.options.getChannel("categoria");
 
-                config.channels.ticketPanel =
-                    canal.id;
-
-                config.tickets.category =
-                    categoria.id;
+                config.channels.ticketPanel = canal.id;
+                config.tickets.category = categoria.id;
 
                 guardarDatos();
 
@@ -1287,31 +1189,25 @@ client.on("interactionCreate", async interaction => {
 
             if (sub === "roles") {
                 const owner =
-                    interaction.options.getRole(
-                        "owner"
-                    );
+                    interaction.options.getRole("owner");
 
                 const staff =
-                    interaction.options.getRole(
-                        "staff"
-                    );
+                    interaction.options.getRole("staff");
 
                 const mod =
-                    interaction.options.getRole(
-                        "mod"
-                    );
+                    interaction.options.getRole("mod");
 
-                if (owner)
-                    config.roles.owner =
-                        owner.id;
+                if (owner) {
+                    config.roles.owner = owner.id;
+                }
 
-                if (staff)
-                    config.roles.staff =
-                        staff.id;
+                if (staff) {
+                    config.roles.staff = staff.id;
+                }
 
-                if (mod)
-                    config.roles.mod =
-                        mod.id;
+                if (mod) {
+                    config.roles.mod = mod.id;
+                }
 
                 guardarDatos();
 
@@ -1324,23 +1220,14 @@ client.on("interactionCreate", async interaction => {
 
             if (sub === "ip") {
                 const direccion =
-                    interaction.options.getString(
-                        "direccion"
-                    );
+                    interaction.options.getString("direccion");
 
                 const puerto =
-                    interaction.options.getInteger(
-                        "puerto"
-                    );
+                    interaction.options.getInteger("puerto");
 
-                config.ip.enabled =
-                    true;
-
-                config.ip.address =
-                    direccion;
-
-                config.ip.port =
-                    puerto;
+                config.ip.enabled = true;
+                config.ip.address = direccion;
+                config.ip.port = puerto;
 
                 guardarDatos();
 
@@ -1353,14 +1240,10 @@ client.on("interactionCreate", async interaction => {
 
             if (sub === "mensajes") {
                 const tipo =
-                    interaction.options.getString(
-                        "tipo"
-                    );
+                    interaction.options.getString("tipo");
 
                 const texto =
-                    interaction.options.getString(
-                        "texto"
-                    );
+                    interaction.options.getString("texto");
 
                 if (texto.length > 4000) {
                     return interaction.reply({
@@ -1370,21 +1253,21 @@ client.on("interactionCreate", async interaction => {
                     });
                 }
 
-                if (tipo === "bienvenida")
-                    config.welcome.message =
-                        texto;
+                if (tipo === "bienvenida") {
+                    config.welcome.message = texto;
+                }
 
-                if (tipo === "verificacion")
-                    config.verification.message =
-                        texto;
+                if (tipo === "verificacion") {
+                    config.verification.message = texto;
+                }
 
-                if (tipo === "tickets")
-                    config.ticket.message =
-                        texto;
+                if (tipo === "tickets") {
+                    config.ticket.message = texto;
+                }
 
-                if (tipo === "ip")
-                    config.ip.message =
-                        texto;
+                if (tipo === "ip") {
+                    config.ip.message = texto;
+                }
 
                 guardarDatos();
 
@@ -1400,10 +1283,7 @@ client.on("interactionCreate", async interaction => {
         // IP
         // =================================================
 
-        if (
-            interaction.commandName ===
-            "ip"
-        ) {
+        if (interaction.commandName === "ip") {
             if (
                 !config.ip.enabled ||
                 !config.ip.address
@@ -1415,51 +1295,44 @@ client.on("interactionCreate", async interaction => {
                 });
             }
 
-            const embed =
-                new EmbedBuilder()
-                    .setColor(0x57f287)
-                    .setTitle(
-                        reemplazarVariables(
-                            config.ip.title,
-                            {
-                                servidor:
-                                    guild.name,
-                                ip:
-                                    config.ip.address,
-                                puerto:
-                                    config.ip.port
-                            }
-                        )
-                    )
-                    .setDescription(
-                        reemplazarVariables(
-                            config.ip.message,
-                            {
-                                servidor:
-                                    guild.name,
-                                ip:
-                                    config.ip.address,
-                                puerto:
-                                    config.ip.port
-                            }
-                        )
-                    )
-                    .addFields(
+            const embed = new EmbedBuilder()
+                .setColor(0x57f287)
+                .setTitle(
+                    reemplazarVariables(
+                        config.ip.title,
                         {
-                            name: "🌐 IP",
-                            value:
-                                `\`${config.ip.address}\``
-                        },
-                        {
-                            name: "🔌 PUERTO",
-                            value:
-                                `\`${config.ip.port}\``
+                            servidor: guild.name,
+                            ip: config.ip.address,
+                            puerto: config.ip.port
                         }
                     )
-                    .setFooter({
-                        text: guild.name
-                    })
-                    .setTimestamp();
+                )
+                .setDescription(
+                    reemplazarVariables(
+                        config.ip.message,
+                        {
+                            servidor: guild.name,
+                            ip: config.ip.address,
+                            puerto: config.ip.port
+                        }
+                    )
+                )
+                .addFields(
+                    {
+                        name: "🌐 IP",
+                        value:
+                            `\`${config.ip.address}\``
+                    },
+                    {
+                        name: "🔌 PUERTO",
+                        value:
+                            `\`${config.ip.port}\``
+                    }
+                )
+                .setFooter({
+                    text: guild.name
+                })
+                .setTimestamp();
 
             return interaction.reply({
                 embeds: [embed]
@@ -1470,10 +1343,7 @@ client.on("interactionCreate", async interaction => {
         // CREATE
         // =================================================
 
-        if (
-            interaction.commandName ===
-            "create"
-        ) {
+        if (interaction.commandName === "create") {
             if (!esOwner(interaction)) {
                 return interaction.reply({
                     content:
@@ -1572,9 +1442,7 @@ client.on("interactionCreate", async interaction => {
 
             if (sub === "msj") {
                 const texto =
-                    interaction.options.getString(
-                        "texto"
-                    );
+                    interaction.options.getString("texto");
 
                 if (texto.length > 4096) {
                     return interaction.reply({
@@ -1639,24 +1507,15 @@ client.on("interactionCreate", async interaction => {
         // WARN
         // =================================================
 
-        if (
-            interaction.commandName ===
-            "warn"
-        ) {
+        if (interaction.commandName === "warn") {
             const usuario =
-                interaction.options.getUser(
-                    "usuario"
-                );
+                interaction.options.getUser("usuario");
 
             const motivo =
-                interaction.options.getString(
-                    "motivo"
-                );
+                interaction.options.getString("motivo");
 
             const miembro =
-                await guild.members.fetch(
-                    usuario.id
-                );
+                await guild.members.fetch(usuario.id);
 
             if (
                 !puedeModerar(
@@ -1675,8 +1534,7 @@ client.on("interactionCreate", async interaction => {
 
             config.warnings[usuario.id].push({
                 motivo,
-                moderador:
-                    interaction.user.id,
+                moderador: interaction.user.id,
                 fecha: Date.now()
             });
 
@@ -1692,19 +1550,12 @@ client.on("interactionCreate", async interaction => {
         // WARNINGS
         // =================================================
 
-        if (
-            interaction.commandName ===
-            "warnings"
-        ) {
+        if (interaction.commandName === "warnings") {
             const usuario =
-                interaction.options.getUser(
-                    "usuario"
-                );
+                interaction.options.getUser("usuario");
 
             const lista =
-                config.warnings[
-                    usuario.id
-                ] || [];
+                config.warnings[usuario.id] || [];
 
             if (!lista.length) {
                 return interaction.reply({
@@ -1743,19 +1594,24 @@ client.on("interactionCreate", async interaction => {
         // BAN
         // =================================================
 
-        if (
-            interaction.commandName ===
-            "ban"
-        ) {
+        if (interaction.commandName === "ban") {
             const usuario =
-                interaction.options.getUser(
-                    "usuario"
-                );
+                interaction.options.getUser("usuario");
 
-            const miembro =
-                await guild.members.fetch(
-                    usuario.id
-                );
+            let miembro;
+
+            try {
+                miembro =
+                    await guild.members.fetch(
+                        usuario.id
+                    );
+            } catch {
+                return interaction.reply({
+                    content:
+                        "❌ Ese usuario no está en el servidor.",
+                    ephemeral: true
+                });
+            }
 
             if (
                 !puedeModerar(
@@ -1810,31 +1666,18 @@ client.on("interactionCreate", async interaction => {
         // MUTE
         // =================================================
 
-        if (
-            interaction.commandName ===
-            "mute"
-        ) {
+        if (interaction.commandName === "mute") {
             const usuario =
-                interaction.options.getUser(
-                    "usuario"
-                );
+                interaction.options.getUser("usuario");
 
             const duracion =
-                interaction.options.getString(
-                    "duracion"
-                );
+                interaction.options.getString("duracion");
 
             const tiempo =
-                convertirDuracion(
-                    duracion
-                );
+                convertirDuracion(duracion);
 
             const maximo =
-                28 *
-                24 *
-                60 *
-                60 *
-                1000;
+                28 * 24 * 60 * 60 * 1000;
 
             if (
                 !tiempo ||
@@ -1881,14 +1724,9 @@ client.on("interactionCreate", async interaction => {
         // UNMUTE
         // =================================================
 
-        if (
-            interaction.commandName ===
-            "unmute"
-        ) {
+        if (interaction.commandName === "unmute") {
             const usuario =
-                interaction.options.getUser(
-                    "usuario"
-                );
+                interaction.options.getUser("usuario");
 
             const miembro =
                 await guild.members.fetch(
@@ -1923,10 +1761,7 @@ client.on("interactionCreate", async interaction => {
         // UNBAN
         // =================================================
 
-        if (
-            interaction.commandName ===
-            "unban"
-        ) {
+        if (interaction.commandName === "unban") {
             const id =
                 interaction.options
                     .getString("id")
@@ -1963,10 +1798,7 @@ client.on("interactionCreate", async interaction => {
         // CLEAR
         // =================================================
 
-        if (
-            interaction.commandName ===
-            "clear"
-        ) {
+        if (interaction.commandName === "clear") {
             const cantidad =
                 interaction.options.getInteger(
                     "cantidad"
@@ -2003,19 +1835,14 @@ client.on("interactionCreate", async interaction => {
         // SLOWMODE
         // =================================================
 
-        if (
-            interaction.commandName ===
-            "slowmode"
-        ) {
+        if (interaction.commandName === "slowmode") {
             const entrada =
                 interaction.options.getString(
                     "tiempo"
                 );
 
             const tiempo =
-                convertirDuracion(
-                    entrada
-                );
+                convertirDuracion(entrada);
 
             if (!tiempo) {
                 return interaction.reply({
@@ -2026,9 +1853,7 @@ client.on("interactionCreate", async interaction => {
             }
 
             const segundos =
-                Math.floor(
-                    tiempo / 1000
-                );
+                Math.floor(tiempo / 1000);
 
             if (segundos > 21600) {
                 return interaction.reply({
@@ -2054,17 +1879,14 @@ client.on("interactionCreate", async interaction => {
         // =================================================
 
         if (
-            interaction.commandName ===
-                "lock" ||
-            interaction.commandName ===
-                "unlock"
+            interaction.commandName === "lock" ||
+            interaction.commandName === "unlock"
         ) {
             const sub =
                 interaction.options.getSubcommand();
 
             const bloquear =
-                interaction.commandName ===
-                "lock";
+                interaction.commandName === "lock";
 
             await interaction.deferReply({
                 ephemeral: true
@@ -2085,9 +1907,7 @@ client.on("interactionCreate", async interaction => {
                     guild.roles.everyone,
                     {
                         SendMessages:
-                            bloquear
-                                ? false
-                                : null
+                            bloquear ? false : null
                     }
                 );
 
@@ -2121,9 +1941,7 @@ client.on("interactionCreate", async interaction => {
                             guild.roles.everyone,
                             {
                                 SendMessages:
-                                    bloquear
-                                        ? false
-                                        : null
+                                    bloquear ? false : null
                             }
                         );
 
@@ -2166,7 +1984,7 @@ client.on("interactionCreate", async interaction => {
 });
 
 // =====================================================
-// MENSAJES / ANTI INVITACIONES
+// ANTI INVITACIONES
 // =====================================================
 
 client.on("messageCreate", async message => {
@@ -2179,12 +1997,9 @@ client.on("messageCreate", async message => {
         }
 
         const config =
-            obtenerConfig(
-                message.guild.id
-            );
+            obtenerConfig(message.guild.id);
 
-        const miembro =
-            message.member;
+        const miembro = message.member;
 
         const protegido =
             miembro &&
@@ -2217,10 +2032,7 @@ client.on("messageCreate", async message => {
                 message.content || ""
             );
 
-        if (
-            invitacion &&
-            !protegido
-        ) {
+        if (invitacion && !protegido) {
             try {
                 await message.delete();
             } catch {}
