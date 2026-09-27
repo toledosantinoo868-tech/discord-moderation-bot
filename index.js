@@ -13,56 +13,130 @@ const {
     Partials
 } = require("discord.js");
 
+const fs = require("fs");
+const path = require("path");
 const http = require("http");
 
 // =====================================================
-// CONFIGURACIÓN
+// CONFIGURACIÓN DEL BOT
 // =====================================================
 
 const CLIENT_ID = "1552817688378605650";
 const TOKEN = process.env.DISCORD_TOKEN;
 
-// =====================================================
-// ROLES
-// =====================================================
+const PORT = Number(process.env.PORT) || 10000;
 
-const OWNER_ROLE_ID = "1531489394127536188";
-const STAFF_ROLE_ID = "1532574929235607632";
-const MOD_ROLE_ID = "1538995243490353263";
-const VERIFY_ROLE_ID = "1544521207708131409";
+const DATA_FILE = path.join(__dirname, "data.json");
 
 // =====================================================
-// CANALES
+// BASE DE DATOS SIMPLE
 // =====================================================
 
-const WELCOME_CHANNEL_ID = "1531493723840450580";
-const LOG_CHANNEL_ID = "1544504719047917610";
-const VERIFY_CHANNEL_ID = "1544523269376450590";
+function cargarDatos() {
+    try {
+        if (!fs.existsSync(DATA_FILE)) {
+            fs.writeFileSync(DATA_FILE, "{}");
+        }
 
-// =====================================================
-// TICKETS
-// =====================================================
+        return JSON.parse(
+            fs.readFileSync(DATA_FILE, "utf8")
+        );
+    } catch (error) {
+        console.error(
+            "❌ ERROR CARGANDO DATA:",
+            error
+        );
 
-const TICKET_PANEL_CHANNEL_ID = "1533646002878283936";
-const TICKET_CATEGORY_ID = "1532906564569272401";
+        return {};
+    }
+}
+
+const database = cargarDatos();
+
+function guardarDatos() {
+    try {
+        fs.writeFileSync(
+            DATA_FILE,
+            JSON.stringify(database, null, 4)
+        );
+    } catch (error) {
+        console.error(
+            "❌ ERROR GUARDANDO DATA:",
+            error
+        );
+    }
+}
+
+function obtenerConfig(guildId) {
+    if (!database[guildId]) {
+        database[guildId] = {
+            roles: {
+                owner: null,
+                staff: null,
+                mod: null,
+                verify: null
+            },
+
+            channels: {
+                welcome: null,
+                logs: null,
+                verify: null,
+                ticketPanel: null
+            },
+
+            tickets: {
+                category: null
+            },
+
+            welcome: {
+                enabled: false
+            },
+
+            verification: {
+                enabled: false
+            },
+
+            ip: {
+                enabled: false,
+                address: null,
+                port: null
+            },
+
+            warnings: {}
+        };
+
+        guardarDatos();
+    }
+
+    return database[guildId];
+}
 
 // =====================================================
 // SERVIDOR HTTP
 // =====================================================
 
-const PORT = Number(process.env.PORT) || 10000;
+const httpServer = http.createServer(
+    (req, res) => {
+        res.writeHead(200, {
+            "Content-Type":
+                "text/plain; charset=utf-8"
+        });
 
-const httpServer = http.createServer((req, res) => {
-    res.writeHead(200, {
-        "Content-Type": "text/plain; charset=utf-8"
-    });
+        res.end(
+            "Discord bot online"
+        );
+    }
+);
 
-    res.end("Discord bot online");
-});
-
-httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`🌐 Servidor HTTP escuchando en el puerto ${PORT}`);
-});
+httpServer.listen(
+    PORT,
+    "0.0.0.0",
+    () => {
+        console.log(
+            `🌐 Servidor HTTP escuchando en puerto ${PORT}`
+        );
+    }
+);
 
 // =====================================================
 // CLIENTE DISCORD
@@ -89,12 +163,6 @@ const client = new Client({
 const messageCache = new Map();
 
 // =====================================================
-// ADVERTENCIAS
-// =====================================================
-
-const warnings = new Map();
-
-// =====================================================
 // ANTI-SPAM
 // =====================================================
 
@@ -102,52 +170,95 @@ const spamTracker = new Map();
 
 const SPAM_MESSAGE_LIMIT = 5;
 const SPAM_WINDOW = 5000;
-const SPAM_TIMEOUT = 30 * 1000;
+const SPAM_TIMEOUT = 30000;
 
 // =====================================================
-// FUNCIONES DE PERMISOS
+// CONFIGURACIÓN / PERMISOS
 // =====================================================
 
 function esOwner(interaction) {
-    if (!interaction.guild) return false;
+    if (!interaction.guild) {
+        return false;
+    }
+
+    const config =
+        obtenerConfig(
+            interaction.guild.id
+        );
 
     return (
-        interaction.guild.ownerId === interaction.user.id ||
-        interaction.member?.roles?.cache?.has(OWNER_ROLE_ID)
+        interaction.guild.ownerId ===
+            interaction.user.id ||
+
+        (
+            config.roles.owner &&
+            interaction.member?.roles?.cache?.has(
+                config.roles.owner
+            )
+        )
     );
 }
 
 function esStaff(interaction) {
-    if (!interaction.guild) return false;
+    if (!interaction.guild) {
+        return false;
+    }
+
+    const config =
+        obtenerConfig(
+            interaction.guild.id
+        );
 
     return (
         esOwner(interaction) ||
-        interaction.member?.roles?.cache?.has(STAFF_ROLE_ID) ||
-        interaction.member?.roles?.cache?.has(MOD_ROLE_ID) ||
+
+        (
+            config.roles.staff &&
+            interaction.member?.roles?.cache?.has(
+                config.roles.staff
+            )
+        ) ||
+
+        (
+            config.roles.mod &&
+            interaction.member?.roles?.cache?.has(
+                config.roles.mod
+            )
+        ) ||
+
         interaction.member?.permissions?.has(
             PermissionFlagsBits.Administrator
         )
     );
 }
 
-// =====================================================
-// PROTECCIÓN DE JERARQUÍA
-// =====================================================
-
-function puedeModerar(interaction, miembro) {
-    if (!interaction.guild || !miembro) {
+function puedeModerar(
+    interaction,
+    miembro
+) {
+    if (
+        !interaction.guild ||
+        !miembro
+    ) {
         return false;
     }
 
-    if (interaction.guild.ownerId === interaction.user.id) {
+    if (
+        interaction.guild.ownerId ===
+        interaction.user.id
+    ) {
         return true;
     }
 
-    if (miembro.id === interaction.guild.ownerId) {
+    if (
+        miembro.id ===
+        interaction.guild.ownerId
+    ) {
         return false;
     }
 
-    const ejecutor = interaction.member;
+    const ejecutor =
+        interaction.member;
 
     if (!ejecutor) {
         return false;
@@ -156,6 +267,48 @@ function puedeModerar(interaction, miembro) {
     return (
         miembro.roles.highest.position <
         ejecutor.roles.highest.position
+    );
+}
+
+// =====================================================
+// DURACIONES
+// =====================================================
+
+function convertirDuracion(entrada) {
+    if (
+        !entrada ||
+        typeof entrada !== "string"
+    ) {
+        return null;
+    }
+
+    const match =
+        entrada
+            .trim()
+            .match(
+                /^(\d+)\s*(s|m|h|d)$/i
+            );
+
+    if (!match) {
+        return null;
+    }
+
+    const cantidad =
+        Number(match[1]);
+
+    const unidad =
+        match[2].toLowerCase();
+
+    const multiplicadores = {
+        s: 1000,
+        m: 60 * 1000,
+        h: 60 * 60 * 1000,
+        d: 24 * 60 * 60 * 1000
+    };
+
+    return (
+        cantidad *
+        multiplicadores[unidad]
     );
 }
 
@@ -169,48 +322,75 @@ function guardarMensaje(message) {
     if (!message.guild) return;
     if (message.author?.bot) return;
 
-    messageCache.set(message.id, {
-        id: message.id,
-        guildId: message.guild.id,
-        channelId: message.channel?.id,
-        channelName: message.channel?.name || "desconocido",
-        authorId: message.author?.id,
-        authorTag: message.author?.tag || "Desconocido",
-        authorAvatar: message.author?.displayAvatarURL({
-            extension: "png",
-            size: 256
-        }),
-        content: message.content || ""
-    });
+    messageCache.set(
+        message.id,
+        {
+            id: message.id,
+            guildId:
+                message.guild.id,
+            channelId:
+                message.channel?.id,
+            channelName:
+                message.channel?.name ||
+                "desconocido",
+            authorId:
+                message.author?.id,
+            authorTag:
+                message.author?.tag ||
+                "Desconocido",
+            content:
+                message.content || ""
+        }
+    );
 
-    if (messageCache.size > 5000) {
+    if (
+        messageCache.size >
+        5000
+    ) {
         const primero =
-            messageCache.keys().next().value;
+            messageCache.keys()
+                .next()
+                .value;
 
         if (primero) {
-            messageCache.delete(primero);
+            messageCache.delete(
+                primero
+            );
         }
     }
 }
 
 // =====================================================
-// ENVIAR LOG
+// LOGS
 // =====================================================
 
-async function enviarLog(guild, embed) {
+async function enviarLog(
+    guild,
+    embed
+) {
     try {
         if (!guild) return;
 
-        const canal =
-            await guild.channels.fetch(LOG_CHANNEL_ID);
+        const config =
+            obtenerConfig(
+                guild.id
+            );
 
-        if (!canal) {
-            console.log("❌ No existe el canal de logs.");
+        if (
+            !config.channels.logs
+        ) {
             return;
         }
 
-        if (!canal.isTextBased()) {
-            console.log("❌ El canal de logs no es de texto.");
+        const canal =
+            await guild.channels.fetch(
+                config.channels.logs
+            );
+
+        if (
+            !canal ||
+            !canal.isTextBased()
+        ) {
             return;
         }
 
@@ -221,81 +401,61 @@ async function enviarLog(guild, embed) {
     } catch (error) {
         console.error(
             "❌ ERROR ENVIANDO LOG:",
-            error.message || error
+            error.message ||
+            error
         );
     }
-}
-
-// =====================================================
-// PARSEAR DURACIÓN
-// =====================================================
-
-function convertirDuracion(entrada) {
-    if (!entrada || typeof entrada !== "string") {
-        return null;
-    }
-
-    const match =
-        entrada.trim().match(
-            /^(\d+)\s*(s|m|h|d)$/i
-        );
-
-    if (!match) {
-        return null;
-    }
-
-    const cantidad = Number(match[1]);
-    const unidad = match[2].toLowerCase();
-
-    const multiplicadores = {
-        s: 1000,
-        m: 60 * 1000,
-        h: 60 * 60 * 1000,
-        d: 24 * 60 * 60 * 1000
-    };
-
-    return cantidad * multiplicadores[unidad];
 }
 
 // =====================================================
 // PANEL VERIFICACIÓN
 // =====================================================
 
-function crearPanelVerificacion() {
+function crearPanelVerificacion(
+    guildName
+) {
     const embed =
         new EmbedBuilder()
             .setColor(0x8E44AD)
-            .setTitle("🛡️ VERIFICACIÓN — LA ORDEN MORADA")
+            .setTitle(
+                "🛡️ VERIFICACIÓN"
+            )
             .setDescription(
-                "¡Bienvenido/a a **La Orden Morada**! 💜\n\n" +
+                `¡Bienvenido/a a **${guildName}**! 💜\n\n` +
                 "Para acceder al servidor, primero tenés que verificarte.\n\n" +
-                "Al presionar **✅ Verificar**, aceptás respetar " +
-                "las reglas y normas de la comunidad.\n\n" +
-                "🔐 Una vez verificado/a, recibirás automáticamente " +
-                "el rol correspondiente.\n\n" +
-                "💜 ¡Gracias por formar parte de **La Orden Morada**!\n\n" +
+                "Al presionar **✅ Verificar**, recibirás automáticamente " +
+                "el rol de verificado.\n\n" +
                 "━━━━━━━━━━━━━━━━━━━━\n\n" +
                 "🟢 **Presioná el botón de abajo para verificarte.**"
             )
             .setFooter({
-                text: "La Orden Morada • Verificación"
+                text:
+                    `${guildName} • Verificación`
             })
             .setTimestamp();
 
     const boton =
         new ButtonBuilder()
-            .setCustomId("verificar_usuario")
-            .setLabel("Verificar")
+            .setCustomId(
+                "verificar_usuario"
+            )
+            .setLabel(
+                "Verificar"
+            )
             .setEmoji("✅")
-            .setStyle(ButtonStyle.Success);
-
-    const fila =
-        new ActionRowBuilder()
-            .addComponents(boton);
+            .setStyle(
+                ButtonStyle.Success
+            );
 
     return {
         embeds: [embed],
-        components: [fila]
+
+        components: [
+            new ActionRowBuilder()
+                .addComponents(
+                    boton
+                )
+        ]
     };
 }
 
@@ -303,44 +463,50 @@ function crearPanelVerificacion() {
 // PANEL TICKETS
 // =====================================================
 
-function crearPanelTickets() {
+function crearPanelTickets(
+    guildName
+) {
     const embed =
         new EmbedBuilder()
             .setColor(0x5865F2)
-            .setTitle("🎫 SOPORTE — LA ORDEN MORADA")
+            .setTitle(
+                "🎫 SOPORTE"
+            )
             .setDescription(
-                "¿Necesitás ayuda? 💜\n\n" +
-                "Nuestro equipo está disponible para ayudarte.\n\n" +
-                "🎫 **¿Cómo abrir un ticket?**\n" +
-                "Presioná el botón **🎫 Crear ticket**.\n\n" +
+                `¿Necesitás ayuda en **${guildName}**? 💜\n\n` +
+                "Presioná **🎫 Crear ticket** para contactar con el equipo.\n\n" +
                 "🔒 El ticket será privado.\n\n" +
-                "📌 **Antes de abrir un ticket:**\n" +
-                "• Explicá claramente tu problema.\n" +
-                "• No abras tickets innecesarios.\n" +
-                "• Esperá al equipo.\n" +
-                "• No hagas spam.\n\n" +
                 "━━━━━━━━━━━━━━━━━━━━\n\n" +
                 "🟢 **Presioná el botón para abrir un ticket.**"
             )
             .setFooter({
-                text: "La Orden Morada • Sistema de soporte"
+                text:
+                    `${guildName} • Sistema de soporte`
             })
             .setTimestamp();
 
     const boton =
         new ButtonBuilder()
-            .setCustomId("crear_ticket")
-            .setLabel("Crear ticket")
+            .setCustomId(
+                "crear_ticket"
+            )
+            .setLabel(
+                "Crear ticket"
+            )
             .setEmoji("🎫")
-            .setStyle(ButtonStyle.Success);
-
-    const fila =
-        new ActionRowBuilder()
-            .addComponents(boton);
+            .setStyle(
+                ButtonStyle.Success
+            );
 
     return {
         embeds: [embed],
-        components: [fila]
+
+        components: [
+            new ActionRowBuilder()
+                .addComponents(
+                    boton
+                )
+        ]
     };
 }
 
@@ -348,154 +514,54 @@ function crearPanelTickets() {
 // MENSAJE TICKET
 // =====================================================
 
-function crearMensajeTicket(member) {
+function crearMensajeTicket(
+    member
+) {
     const embed =
         new EmbedBuilder()
             .setColor(0x8E44AD)
-            .setTitle("🎫 TICKET DE SOPORTE")
+            .setTitle(
+                "🎫 TICKET DE SOPORTE"
+            )
             .setDescription(
                 `Hola ${member} 💜\n\n` +
                 "Tu ticket fue creado correctamente.\n\n" +
                 "📌 Explicá detalladamente el motivo de tu consulta.\n\n" +
-                "🛡️ Un miembro del Staff, Moderación u Owner " +
-                "atenderá tu ticket.\n\n" +
-                "🚫 No hagas spam ni menciones repetidamente al equipo.\n\n" +
-                "Cuando el problema esté solucionado, podés " +
-                "utilizar **🔒 Cerrar ticket**."
+                "🛡️ El equipo te atenderá lo antes posible.\n\n" +
+                "Cuando el problema esté solucionado, un miembro del Staff puede cerrar el ticket."
             )
             .setFooter({
-                text: "La Orden Morada • Soporte"
+                text:
+                    "Sistema de soporte"
             })
             .setTimestamp();
 
     const cerrar =
         new ButtonBuilder()
-            .setCustomId("cerrar_ticket")
-            .setLabel("Cerrar ticket")
+            .setCustomId(
+                "cerrar_ticket"
+            )
+            .setLabel(
+                "Cerrar ticket"
+            )
             .setEmoji("🔒")
-            .setStyle(ButtonStyle.Danger);
-
-    const fila =
-        new ActionRowBuilder()
-            .addComponents(cerrar);
+            .setStyle(
+                ButtonStyle.Danger
+            );
 
     return {
-        content: `${member}`,
+        content:
+            `${member}`,
+
         embeds: [embed],
-        components: [fila]
+
+        components: [
+            new ActionRowBuilder()
+                .addComponents(
+                    cerrar
+                )
+        ]
     };
-}
-
-// =====================================================
-// ASEGURAR PANEL VERIFICACIÓN
-// =====================================================
-
-async function asegurarPanelVerificacion() {
-    try {
-        for (const [, guild] of client.guilds.cache) {
-            const canal =
-                await guild.channels.fetch(
-                    VERIFY_CHANNEL_ID
-                );
-
-            if (!canal || !canal.isTextBased()) {
-                continue;
-            }
-
-            const mensajes =
-                await canal.messages.fetch({
-                    limit: 100
-                });
-
-            const existe =
-                mensajes.find(message => {
-                    if (
-                        message.author?.id !==
-                        client.user.id
-                    ) {
-                        return false;
-                    }
-
-                    return message.components?.some(row =>
-                        row.components?.some(component =>
-                            component.customId ===
-                            "verificar_usuario"
-                        )
-                    );
-                });
-
-            if (!existe) {
-                await canal.send(
-                    crearPanelVerificacion()
-                );
-
-                console.log(
-                    `✅ Panel de verificación enviado en ${guild.name}.`
-                );
-            }
-        }
-    } catch (error) {
-        console.error(
-            "❌ ERROR PANEL VERIFICACIÓN:",
-            error.message || error
-        );
-    }
-}
-
-// =====================================================
-// ASEGURAR PANEL TICKETS
-// =====================================================
-
-async function asegurarPanelTickets() {
-    try {
-        for (const [, guild] of client.guilds.cache) {
-            const canal =
-                await guild.channels.fetch(
-                    TICKET_PANEL_CHANNEL_ID
-                );
-
-            if (!canal || !canal.isTextBased()) {
-                continue;
-            }
-
-            const mensajes =
-                await canal.messages.fetch({
-                    limit: 100
-                });
-
-            const existe =
-                mensajes.find(message => {
-                    if (
-                        message.author?.id !==
-                        client.user.id
-                    ) {
-                        return false;
-                    }
-
-                    return message.components?.some(row =>
-                        row.components?.some(component =>
-                            component.customId ===
-                            "crear_ticket"
-                        )
-                    );
-                });
-
-            if (!existe) {
-                await canal.send(
-                    crearPanelTickets()
-                );
-
-                console.log(
-                    `✅ Panel de tickets enviado en ${guild.name}.`
-                );
-            }
-        }
-    } catch (error) {
-        console.error(
-            "❌ ERROR PANEL TICKETS:",
-            error.message || error
-        );
-    }
 }
 
 // =====================================================
@@ -504,164 +570,554 @@ async function asegurarPanelTickets() {
 
 const commands = [
 
+    // =================================================
+    // IP
+    // =================================================
+
     new SlashCommandBuilder()
         .setName("ip")
         .setDescription(
             "Muestra la IP del servidor de Minecraft."
         ),
 
+    // =================================================
+    // SETUP
+    // =================================================
+
     new SlashCommandBuilder()
-        .setName("ban")
-        .setDescription("Banea a un usuario.")
-        .addUserOption(option =>
-            option
-                .setName("usuario")
-                .setDescription("Usuario que quieres banear")
-                .setRequired(true)
+        .setName("setup")
+        .setDescription(
+            "Configura el bot para este servidor."
         )
         .setDefaultMemberPermissions(
-            PermissionFlagsBits.BanMembers
+            PermissionFlagsBits.Administrator
+        )
+        .addSubcommand(
+            sub =>
+                sub
+                    .setName(
+                        "bienvenida"
+                    )
+                    .setDescription(
+                        "Configura el canal de bienvenida."
+                    )
+                    .addChannelOption(
+                        option =>
+                            option
+                                .setName(
+                                    "canal"
+                                )
+                                .setDescription(
+                                    "Canal de bienvenida."
+                                )
+                                .addChannelTypes(
+                                    ChannelType.GuildText
+                                )
+                                .setRequired(
+                                    true
+                                )
+                    )
+        )
+
+        .addSubcommand(
+            sub =>
+                sub
+                    .setName(
+                        "verificacion"
+                    )
+                    .setDescription(
+                        "Configura el sistema de verificación."
+                    )
+                    .addChannelOption(
+                        option =>
+                            option
+                                .setName(
+                                    "canal"
+                                )
+                                .setDescription(
+                                    "Canal de verificación."
+                                )
+                                .addChannelTypes(
+                                    ChannelType.GuildText
+                                )
+                                .setRequired(
+                                    true
+                                )
+                    )
+                    .addRoleOption(
+                        option =>
+                            option
+                                .setName(
+                                    "rol"
+                                )
+                                .setDescription(
+                                    "Rol que recibirá el usuario."
+                                )
+                                .setRequired(
+                                    true
+                                )
+                    )
+        )
+
+        .addSubcommand(
+            sub =>
+                sub
+                    .setName(
+                        "logs"
+                    )
+                    .setDescription(
+                        "Configura el canal de logs."
+                    )
+                    .addChannelOption(
+                        option =>
+                            option
+                                .setName(
+                                    "canal"
+                                )
+                                .setDescription(
+                                    "Canal de logs."
+                                )
+                                .addChannelTypes(
+                                    ChannelType.GuildText
+                                )
+                                .setRequired(
+                                    true
+                                )
+                    )
+        )
+
+        .addSubcommand(
+            sub =>
+                sub
+                    .setName(
+                        "tickets"
+                    )
+                    .setDescription(
+                        "Configura el sistema de tickets."
+                    )
+                    .addChannelOption(
+                        option =>
+                            option
+                                .setName(
+                                    "canal"
+                                )
+                                .setDescription(
+                                    "Canal donde estará el panel."
+                                )
+                                .addChannelTypes(
+                                    ChannelType.GuildText
+                                )
+                                .setRequired(
+                                    true
+                                )
+                    )
+                    .addChannelOption(
+                        option =>
+                            option
+                                .setName(
+                                    "categoria"
+                                )
+                                .setDescription(
+                                    "Categoría donde se crearán los tickets."
+                                )
+                                .addChannelTypes(
+                                    ChannelType.GuildCategory
+                                )
+                                .setRequired(
+                                    true
+                                )
+                    )
+        )
+
+        .addSubcommand(
+            sub =>
+                sub
+                    .setName(
+                        "roles"
+                    )
+                    .setDescription(
+                        "Configura los roles del bot."
+                    )
+                    .addRoleOption(
+                        option =>
+                            option
+                                .setName(
+                                    "owner"
+                                )
+                                .setDescription(
+                                    "Rol Owner."
+                                )
+                                .setRequired(
+                                    false
+                                )
+                    )
+                    .addRoleOption(
+                        option =>
+                            option
+                                .setName(
+                                    "staff"
+                                )
+                                .setDescription(
+                                    "Rol Staff."
+                                )
+                                .setRequired(
+                                    false
+                                )
+                    )
+                    .addRoleOption(
+                        option =>
+                            option
+                                .setName(
+                                    "mod"
+                                )
+                                .setDescription(
+                                    "Rol Moderador."
+                                )
+                                .setRequired(
+                                    false
+                                )
+        )
+
+        .addSubcommand(
+            sub =>
+                sub
+                    .setName(
+                        "ip"
+                    )
+                    .setDescription(
+                        "Configura la IP de Minecraft."
+                    )
+                    .addStringOption(
+                        option =>
+                            option
+                                .setName(
+                                    "direccion"
+                                )
+                                .setDescription(
+                                    "IP o dominio."
+                                )
+                                .setRequired(
+                                    true
+                                )
+                    )
+                    .addIntegerOption(
+                        option =>
+                            option
+                                .setName(
+                                    "puerto"
+                                )
+                                .setDescription(
+                                    "Puerto."
+                                )
+                                .setMinValue(
+                                    1
+                                )
+                                .setMaxValue(
+                                    65535
+                                )
+                                .setRequired(
+                                    true
+                                )
+                    )
+        ),
+
+    // =================================================
+    // CREATE
+    // =================================================
+
+    new SlashCommandBuilder()
+        .setName("create")
+        .setDescription(
+            "Crea paneles del bot."
+        )
+        .addSubcommand(
+            sub =>
+                sub
+                    .setName(
+                        "verificacion"
+                    )
+                    .setDescription(
+                        "Crea el panel de verificación."
+                    )
+        )
+        .addSubcommand(
+            sub =>
+                sub
+                    .setName(
+                        "tickets"
+                    )
+                    .setDescription(
+                        "Crea el panel de tickets."
+                    )
+        )
+        .addSubcommand(
+            sub =>
+                sub
+                    .setName(
+                        "msj"
+                    )
+                    .setDescription(
+                        "Crea un mensaje embed."
+                    )
+                    .addStringOption(
+                        option =>
+                            option
+                                .setName(
+                                    "texto"
+                                )
+                                .setDescription(
+                                    "Texto del mensaje."
+                                )
+                                .setRequired(
+                                    true
+                                )
+                    )
+        ),
+
+    // =================================================
+    // MODERACIÓN
+    // =================================================
+
+    new SlashCommandBuilder()
+        .setName("ban")
+        .setDescription(
+            "Banea a un usuario."
+        )
+        .addUserOption(
+            option =>
+                option
+                    .setName(
+                        "usuario"
+                    )
+                    .setDescription(
+                        "Usuario."
+                    )
+                    .setRequired(
+                        true
+                    )
         ),
 
     new SlashCommandBuilder()
         .setName("mute")
-        .setDescription("Silencia temporalmente a un usuario.")
-        .addUserOption(option =>
-            option
-                .setName("usuario")
-                .setDescription("Usuario que quieres silenciar")
-                .setRequired(true)
+        .setDescription(
+            "Silencia temporalmente."
         )
-        .addStringOption(option =>
-            option
-                .setName("duracion")
-                .setDescription("Ej: 30s, 5m, 1h, 1d")
-                .setRequired(true)
+        .addUserOption(
+            option =>
+                option
+                    .setName(
+                        "usuario"
+                    )
+                    .setDescription(
+                        "Usuario."
+                    )
+                    .setRequired(
+                        true
+                    )
         )
-        .setDefaultMemberPermissions(
-            PermissionFlagsBits.ModerateMembers
+        .addStringOption(
+            option =>
+                option
+                    .setName(
+                        "duracion"
+                    )
+                    .setDescription(
+                        "Ej: 30s, 5m, 1h, 1d."
+                    )
+                    .setRequired(
+                        true
+                    )
         ),
 
     new SlashCommandBuilder()
         .setName("unmute")
-        .setDescription("Quita el mute a un usuario.")
-        .addUserOption(option =>
-            option
-                .setName("usuario")
-                .setDescription("Usuario al que quitar el mute")
-                .setRequired(true)
+        .setDescription(
+            "Quita el mute."
         )
-        .setDefaultMemberPermissions(
-            PermissionFlagsBits.ModerateMembers
+        .addUserOption(
+            option =>
+                option
+                    .setName(
+                        "usuario"
+                    )
+                    .setDescription(
+                        "Usuario."
+                    )
+                    .setRequired(
+                        true
+                    )
         ),
 
     new SlashCommandBuilder()
         .setName("unban")
-        .setDescription("Desbanea a un usuario.")
-        .addStringOption(option =>
-            option
-                .setName("id")
-                .setDescription("ID del usuario")
-                .setRequired(true)
+        .setDescription(
+            "Desbanea a un usuario."
         )
-        .setDefaultMemberPermissions(
-            PermissionFlagsBits.BanMembers
+        .addStringOption(
+            option =>
+                option
+                    .setName(
+                        "id"
+                    )
+                    .setDescription(
+                        "ID del usuario."
+                    )
+                    .setRequired(
+                        true
+                    )
         ),
 
     new SlashCommandBuilder()
         .setName("warn")
-        .setDescription("Advierte a un usuario.")
-        .addUserOption(option =>
-            option
-                .setName("usuario")
-                .setDescription("Usuario a advertir")
-                .setRequired(true)
+        .setDescription(
+            "Advierte a un usuario."
         )
-        .addStringOption(option =>
-            option
-                .setName("motivo")
-                .setDescription("Motivo de la advertencia")
-                .setRequired(true)
+        .addUserOption(
+            option =>
+                option
+                    .setName(
+                        "usuario"
+                    )
+                    .setDescription(
+                        "Usuario."
+                    )
+                    .setRequired(
+                        true
+                    )
+        )
+        .addStringOption(
+            option =>
+                option
+                    .setName(
+                        "motivo"
+                    )
+                    .setDescription(
+                        "Motivo."
+                    )
+                    .setRequired(
+                        true
+                    )
         ),
 
     new SlashCommandBuilder()
         .setName("warnings")
         .setDescription(
-            "Muestra las advertencias de un usuario."
+            "Muestra las advertencias."
         )
-        .addUserOption(option =>
-            option
-                .setName("usuario")
-                .setDescription("Usuario")
-                .setRequired(true)
+        .addUserOption(
+            option =>
+                option
+                    .setName(
+                        "usuario"
+                    )
+                    .setDescription(
+                        "Usuario."
+                    )
+                    .setRequired(
+                        true
+                    )
         ),
 
     new SlashCommandBuilder()
         .setName("clear")
-        .setDescription("Elimina mensajes de un canal.")
-        .addIntegerOption(option =>
-            option
-                .setName("cantidad")
-                .setDescription("Cantidad de mensajes a eliminar")
-                .setMinValue(1)
-                .setMaxValue(100)
-                .setRequired(true)
+        .setDescription(
+            "Elimina mensajes."
+        )
+        .addIntegerOption(
+            option =>
+                option
+                    .setName(
+                        "cantidad"
+                    )
+                    .setDescription(
+                        "Cantidad."
+                    )
+                    .setMinValue(
+                        1
+                    )
+                    .setMaxValue(
+                        100
+                    )
+                    .setRequired(
+                        true
+                    )
         ),
 
     new SlashCommandBuilder()
         .setName("slowmode")
-        .setDescription("Configura el modo lento.")
-        .addStringOption(option =>
-            option
-                .setName("tiempo")
-                .setDescription("Ej: 5s, 10s, 1m, 5m")
-                .setRequired(true)
+        .setDescription(
+            "Configura slowmode."
+        )
+        .addStringOption(
+            option =>
+                option
+                    .setName(
+                        "tiempo"
+                    )
+                    .setDescription(
+                        "Ej: 5s, 1m, 5m."
+                    )
+                    .setRequired(
+                        true
+                    )
         ),
 
     new SlashCommandBuilder()
         .setName("lock")
-        .setDescription("Bloquea un canal o todo el servidor.")
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName("canal")
-                .setDescription("Bloquea este canal.")
+        .setDescription(
+            "Bloquea canales."
         )
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName("general")
-                .setDescription("Bloquea todos los canales.")
+        .addSubcommand(
+            sub =>
+                sub
+                    .setName(
+                        "canal"
+                    )
+                    .setDescription(
+                        "Bloquea este canal."
+                    )
+        )
+        .addSubcommand(
+            sub =>
+                sub
+                    .setName(
+                        "general"
+                    )
+                    .setDescription(
+                        "Bloquea todos los canales."
+                    )
         ),
 
     new SlashCommandBuilder()
         .setName("unlock")
-        .setDescription("Desbloquea un canal o todo el servidor.")
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName("canal")
-                .setDescription("Desbloquea este canal.")
+        .setDescription(
+            "Desbloquea canales."
         )
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName("general")
-                .setDescription("Desbloquea todos los canales.")
-        ),
-
-    new SlashCommandBuilder()
-        .setName("create")
-        .setDescription("Crea un mensaje personalizado.")
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName("msj")
-                .setDescription("Crea un mensaje en formato embed.")
-                .addStringOption(option =>
-                    option
-                        .setName("texto")
-                        .setDescription("Texto del mensaje.")
-                        .setRequired(true)
-                )
+        .addSubcommand(
+            sub =>
+                sub
+                    .setName(
+                        "canal"
+                    )
+                    .setDescription(
+                        "Desbloquea este canal."
+                    )
+        )
+        .addSubcommand(
+            sub =>
+                sub
+                    .setName(
+                        "general"
+                    )
+                    .setDescription(
+                        "Desbloquea todos los canales."
+                    )
         )
 
-].map(command => command.toJSON());
+].map(
+    command =>
+        command.toJSON()
+);
 
 // =====================================================
 // REGISTRAR COMANDOS
@@ -670,41 +1126,46 @@ const commands = [
 const rest =
     new REST({
         version: "10"
-    }).setToken(TOKEN);
+    }).setToken(
+        TOKEN
+    );
 
 async function registrarComandos() {
     try {
-        console.log("🔄 Registrando comandos slash...");
+        console.log(
+            "🔄 Registrando comandos..."
+        );
 
         await rest.put(
-            Routes.applicationCommands(CLIENT_ID),
+            Routes.applicationCommands(
+                CLIENT_ID
+            ),
             {
                 body: commands
             }
         );
 
         console.log(
-            `✅ ${commands.length} comandos registrados correctamente.`
+            `✅ ${commands.length} comandos registrados.`
         );
 
     } catch (error) {
         console.error(
             "❌ ERROR REGISTRANDO COMANDOS:",
-            error.message || error
+            error
         );
     }
 }
 
 // =====================================================
-// BOT LISTO
+// BOT READY
 // =====================================================
 
 client.once(
     "clientReady",
-    async () => {
-
+    () => {
         console.log(
-            "=========================================="
+            "======================================"
         );
 
         console.log(
@@ -712,39 +1173,27 @@ client.once(
         );
 
         console.log(
-            `🆔 CLIENT ID: ${client.user.id}`
-        );
-
-        console.log(
             `🏠 SERVIDORES: ${client.guilds.cache.size}`
         );
 
         console.log(
-            "🛡️ Anti-spam: ACTIVADO"
+            "⚙️ Sistema /setup: ACTIVADO"
         );
 
         console.log(
-            "🔗 Bloqueo de invitaciones: ACTIVADO"
+            "🛡️ Verificación: ACTIVADA"
         );
 
         console.log(
-            "🎫 Sistema de tickets: ACTIVADO"
+            "🎫 Tickets: ACTIVADOS"
         );
 
         console.log(
-            "🛡️ Sistema de verificación: ACTIVADO"
+            "👋 Bienvenidas: ACTIVADAS"
         );
 
         console.log(
-            "=========================================="
-        );
-
-        setTimeout(
-            async () => {
-                await asegurarPanelVerificacion();
-                await asegurarPanelTickets();
-            },
-            2000
+            "======================================"
         );
     }
 );
@@ -756,13 +1205,25 @@ client.once(
 client.on(
     "messageCreate",
     async message => {
-
         try {
+            if (!message.guild) {
+                return;
+            }
 
-            if (!message.guild) return;
-            if (message.author?.bot) return;
+            if (
+                message.author?.bot
+            ) {
+                return;
+            }
 
-            guardarMensaje(message);
+            guardarMensaje(
+                message
+            );
+
+            const config =
+                obtenerConfig(
+                    message.guild.id
+                );
 
             const miembro =
                 message.member;
@@ -770,23 +1231,46 @@ client.on(
             const protegido =
                 miembro &&
                 (
-                    miembro.roles.cache.has(OWNER_ROLE_ID) ||
-                    miembro.roles.cache.has(STAFF_ROLE_ID) ||
-                    miembro.roles.cache.has(MOD_ROLE_ID) ||
+                    (
+                        config.roles.owner &&
+                        miembro.roles.cache.has(
+                            config.roles.owner
+                        )
+                    ) ||
+
+                    (
+                        config.roles.staff &&
+                        miembro.roles.cache.has(
+                            config.roles.staff
+                        )
+                    ) ||
+
+                    (
+                        config.roles.mod &&
+                        miembro.roles.cache.has(
+                            config.roles.mod
+                        )
+                    ) ||
+
                     miembro.permissions.has(
                         PermissionFlagsBits.Administrator
                     )
                 );
 
-            const invitacionDiscord =
+            // =========================================
+            // INVITACIONES
+            // =========================================
+
+            const invitacion =
                 /(discord\.gg\/|discord\.com\/invite\/|discordapp\.com\/invite\/)/i
-                    .test(message.content || "");
+                    .test(
+                        message.content || ""
+                    );
 
             if (
-                invitacionDiscord &&
+                invitacion &&
                 !protegido
             ) {
-
                 try {
                     await message.delete();
                 } catch {}
@@ -794,7 +1278,7 @@ client.on(
                 const aviso =
                     await message.channel.send({
                         content:
-                            `🚫 ${message.author}, no está permitido enviar invitaciones de otros servidores de Discord.`
+                            `🚫 ${message.author}, no está permitido enviar invitaciones de otros servidores.`
                     });
 
                 setTimeout(
@@ -808,25 +1292,24 @@ client.on(
 
                 const embed =
                     new EmbedBuilder()
-                        .setColor(0xED4245)
+                        .setColor(
+                            0xED4245
+                        )
                         .setTitle(
-                            "🔗 INVITACIÓN DE DISCORD BLOQUEADA"
+                            "🔗 INVITACIÓN BLOQUEADA"
                         )
                         .addFields(
                             {
-                                name: "👤 Usuario",
+                                name:
+                                    "👤 Usuario",
                                 value:
                                     `${message.author}`
                             },
                             {
-                                name: "📍 Canal",
+                                name:
+                                    "📍 Canal",
                                 value:
                                     `${message.channel}`
-                            },
-                            {
-                                name: "🔗 Contenido",
-                                value:
-                                    "Invitación de Discord detectada."
                             }
                         )
                         .setTimestamp();
@@ -839,9 +1322,15 @@ client.on(
                 return;
             }
 
-            if (protegido) {
+            if (
+                protegido
+            ) {
                 return;
             }
+
+            // =========================================
+            // ANTI-SPAM
+            // =========================================
 
             const clave =
                 `${message.guild.id}:${message.author.id}`;
@@ -850,10 +1339,11 @@ client.on(
                 Date.now();
 
             let datos =
-                spamTracker.get(clave);
+                spamTracker.get(
+                    clave
+                );
 
             if (!datos) {
-
                 datos = {
                     mensajes: [],
                     castigado: false
@@ -868,100 +1358,61 @@ client.on(
             datos.mensajes =
                 datos.mensajes.filter(
                     timestamp =>
-                        ahora - timestamp <= SPAM_WINDOW
+                        ahora -
+                        timestamp <=
+                        SPAM_WINDOW
                 );
 
-            datos.mensajes.push(ahora);
+            datos.mensajes.push(
+                ahora
+            );
 
             if (
                 datos.mensajes.length >=
-                SPAM_MESSAGE_LIMIT &&
+                    SPAM_MESSAGE_LIMIT &&
                 !datos.castigado
             ) {
-
-                datos.castigado = true;
-
-                try {
-
-                    const mensajes =
-                        await message.channel.messages.fetch({
-                            limit: 20
-                        });
-
-                    const mensajesSpam =
-                        mensajes.filter(msg =>
-                            msg.author.id ===
-                            message.author.id &&
-                            ahora - msg.createdTimestamp <=
-                            SPAM_WINDOW
-                        );
-
-                    if (mensajesSpam.size > 0) {
-
-                        await message.channel.bulkDelete(
-                            mensajesSpam,
-                            true
-                        );
-                    }
-
-                } catch (error) {
-
-                    console.error(
-                        "❌ No se pudieron eliminar mensajes de spam:",
-                        error.message || error
-                    );
-                }
+                datos.castigado =
+                    true;
 
                 try {
-
                     await miembro.timeout(
                         SPAM_TIMEOUT,
                         "Anti-spam automático"
                     );
-
-                } catch (error) {
-
-                    console.error(
-                        "❌ No se pudo aplicar timeout anti-spam:",
-                        error.message || error
-                    );
-                }
+                } catch {}
 
                 const embed =
                     new EmbedBuilder()
-                        .setColor(0xED4245)
+                        .setColor(
+                            0xED4245
+                        )
                         .setTitle(
                             "🛡️ ANTI-SPAM ACTIVADO"
                         )
                         .setDescription(
-                            `${message.author} fue detectado enviando demasiados mensajes en poco tiempo.`
+                            `${message.author} fue detectado enviando demasiados mensajes.`
                         )
                         .addFields(
                             {
-                                name: "👤 Usuario",
+                                name:
+                                    "👤 Usuario",
                                 value:
                                     `${message.author}`
                             },
                             {
-                                name: "📊 Límite",
+                                name:
+                                    "📊 Límite",
                                 value:
                                     `${SPAM_MESSAGE_LIMIT} mensajes / ${SPAM_WINDOW / 1000}s`
                             },
                             {
-                                name: "🔇 Acción",
+                                name:
+                                    "🔇 Acción",
                                 value:
-                                    "Timeout automático de 30 segundos"
-                            },
-                            {
-                                name: "📍 Canal",
-                                value:
-                                    `${message.channel}`
+                                    "Timeout de 30 segundos"
                             }
                         )
-                        .setFooter({
-                            text:
-                                "La Orden Morada • Anti-Spam"
-                        })
                         .setTimestamp();
 
                 await enviarLog(
@@ -986,210 +1437,18 @@ client.on(
 
                 setTimeout(
                     () => {
-                        spamTracker.delete(clave);
+                        spamTracker.delete(
+                            clave
+                        );
                     },
                     SPAM_WINDOW
                 );
             }
 
         } catch (error) {
-
             console.error(
                 "❌ ERROR MESSAGE CREATE:",
-                error.message || error
-            );
-        }
-    }
-);
-
-// =====================================================
-// MENSAJE ELIMINADO
-// =====================================================
-
-client.on(
-    "messageDelete",
-    async message => {
-
-        try {
-
-            if (!message.guild) return;
-            if (message.author?.bot) return;
-
-            const guardado =
-                messageCache.get(message.id);
-
-            let texto =
-                message.content ||
-                guardado?.content ||
-                "Contenido no disponible.";
-
-            if (texto.length > 1000) {
-                texto =
-                    texto.substring(0, 997) + "...";
-            }
-
-            const autor =
-                message.author ||
-                (
-                    guardado?.authorId
-                        ? await client.users.fetch(
-                            guardado.authorId
-                        ).catch(() => null)
-                        : null
-                );
-
-            const embed =
-                new EmbedBuilder()
-                    .setColor(0xED4245)
-                    .setTitle("🗑️ MENSAJE ELIMINADO")
-                    .addFields(
-                        {
-                            name: "👤 Usuario",
-                            value:
-                                autor
-                                    ? `${autor} \`${autor.tag}\``
-                                    : "Desconocido"
-                        },
-                        {
-                            name: "📍 Canal",
-                            value:
-                                message.channel
-                                    ? `${message.channel}`
-                                    : "Desconocido"
-                        },
-                        {
-                            name: "💬 Mensaje",
-                            value:
-                                `\`\`\`\n${texto}\n\`\`\``
-                        }
-                    )
-                    .setTimestamp();
-
-            if (autor) {
-                embed.setThumbnail(
-                    autor.displayAvatarURL({
-                        extension: "png",
-                        size: 256
-                    })
-                );
-            }
-
-            await enviarLog(
-                message.guild,
-                embed
-            );
-
-            messageCache.delete(
-                message.id
-            );
-
-        } catch (error) {
-
-            console.error(
-                "❌ ERROR MESSAGE DELETE:",
-                error.message || error
-            );
-        }
-    }
-);
-
-// =====================================================
-// MENSAJE EDITADO
-// =====================================================
-
-client.on(
-    "messageUpdate",
-    async (oldMessage, newMessage) => {
-
-        try {
-
-            if (!oldMessage.guild) return;
-            if (oldMessage.author?.bot) return;
-
-            const guardado =
-                messageCache.get(oldMessage.id);
-
-            const antes =
-                oldMessage.content ||
-                guardado?.content ||
-                "";
-
-            const despues =
-                newMessage.content ||
-                "";
-
-            if (antes === despues) {
-                return;
-            }
-
-            let textoAntes =
-                antes || "Sin contenido";
-
-            let textoDespues =
-                despues || "Sin contenido";
-
-            if (textoAntes.length > 900) {
-                textoAntes =
-                    textoAntes.substring(0, 897) + "...";
-            }
-
-            if (textoDespues.length > 900) {
-                textoDespues =
-                    textoDespues.substring(0, 897) + "...";
-            }
-
-            const embed =
-                new EmbedBuilder()
-                    .setColor(0xF1C40F)
-                    .setTitle("✏️ MENSAJE EDITADO")
-                    .addFields(
-                        {
-                            name: "👤 Usuario",
-                            value:
-                                oldMessage.author
-                                    ? `${oldMessage.author} \`${oldMessage.author.tag}\``
-                                    : "Desconocido"
-                        },
-                        {
-                            name: "📍 Canal",
-                            value:
-                                `${oldMessage.channel}`
-                        },
-                        {
-                            name: "🔴 Antes",
-                            value:
-                                `\`\`\`\n${textoAntes}\n\`\`\``
-                        },
-                        {
-                            name: "🟢 Después",
-                            value:
-                                `\`\`\`\n${textoDespues}\n\`\`\``
-                        }
-                    )
-                    .setTimestamp();
-
-            if (oldMessage.author) {
-
-                embed.setThumbnail(
-                    oldMessage.author.displayAvatarURL({
-                        extension: "png",
-                        size: 256
-                    })
-                );
-            }
-
-            await enviarLog(
-                oldMessage.guild,
-                embed
-            );
-
-            guardarMensaje(newMessage);
-
-        } catch (error) {
-
-            console.error(
-                "❌ ERROR MESSAGE UPDATE:",
-                error.message || error
+                error
             );
         }
     }
@@ -1202,15 +1461,28 @@ client.on(
 client.on(
     "guildMemberAdd",
     async member => {
-
         try {
+            const config =
+                obtenerConfig(
+                    member.guild.id
+                );
+
+            if (
+                !config.welcome.enabled ||
+                !config.channels.welcome
+            ) {
+                return;
+            }
 
             const canal =
                 await member.guild.channels.fetch(
-                    WELCOME_CHANNEL_ID
+                    config.channels.welcome
                 );
 
-            if (!canal || !canal.isTextBased()) {
+            if (
+                !canal ||
+                !canal.isTextBased()
+            ) {
                 return;
             }
 
@@ -1222,32 +1494,37 @@ client.on(
 
             const embed =
                 new EmbedBuilder()
-                    .setColor(0x8E44AD)
+                    .setColor(
+                        0x8E44AD
+                    )
                     .setTitle(
-                        "🫶︱𝗕𝗜𝗘𝗡𝗩𝗘𝗡𝗜𝗗𝗢𝗦"
+                        "🫶︱BIENVENIDO/A"
                     )
                     .setDescription(
-                        `💜 **¡Bienvenido/a ${member} a La Orden Morada!**\n\n` +
+                        `💜 **¡Bienvenido/a ${member} a ${member.guild.name}!**\n\n` +
                         "🫶 Esperamos que disfrutes del servidor."
                     )
-                    .setThumbnail(avatar)
-                    .setImage(avatar)
+                    .setThumbnail(
+                        avatar
+                    )
                     .setFooter({
-                        text: "La Orden Morada"
+                        text:
+                            member.guild.name
                     })
                     .setTimestamp();
 
             await canal.send({
                 content:
                     `🎉 ¡Bienvenido/a ${member}!`,
-                embeds: [embed]
+                embeds: [
+                    embed
+                ]
             });
 
         } catch (error) {
-
             console.error(
                 "❌ ERROR BIENVENIDA:",
-                error.message || error
+                error
             );
         }
     }
@@ -1260,42 +1537,60 @@ client.on(
 client.on(
     "interactionCreate",
     async interaction => {
-
         try {
+
+            // =========================================
+            // BOTÓN VERIFICAR
+            // =========================================
 
             if (
                 interaction.isButton() &&
                 interaction.customId ===
-                "verificar_usuario"
+                    "verificar_usuario"
             ) {
+                const config =
+                    obtenerConfig(
+                        interaction.guild.id
+                    );
+
+                if (
+                    !config.roles.verify
+                ) {
+                    return interaction.reply({
+                        content:
+                            "❌ El sistema de verificación todavía no está configurado.",
+                        ephemeral:
+                            true
+                    });
+                }
 
                 const miembro =
                     interaction.member;
 
                 const rol =
                     await interaction.guild.roles.fetch(
-                        VERIFY_ROLE_ID
+                        config.roles.verify
                     );
 
                 if (!rol) {
-
                     return interaction.reply({
                         content:
-                            "❌ No encontré el rol de verificado.",
-                        ephemeral: true
+                            "❌ El rol configurado ya no existe.",
+                        ephemeral:
+                            true
                     });
                 }
 
                 if (
                     miembro.roles.cache.has(
-                        VERIFY_ROLE_ID
+                        rol.id
                     )
                 ) {
-
                     return interaction.reply({
                         content:
                             "✅ Ya estás verificado/a.",
-                        ephemeral: true
+                        ephemeral:
+                            true
                     });
                 }
 
@@ -1305,13 +1600,13 @@ client.on(
                 if (
                     !bot ||
                     rol.position >=
-                    bot.roles.highest.position
+                        bot.roles.highest.position
                 ) {
-
                     return interaction.reply({
                         content:
-                            "❌ El rol de verificado debe estar debajo del rol más alto del bot.",
-                        ephemeral: true
+                            "❌ El rol de verificación debe estar debajo del rol más alto del bot.",
+                        ephemeral:
+                            true
                     });
                 }
 
@@ -1322,22 +1617,29 @@ client.on(
 
                 await interaction.reply({
                     content:
-                        `✅ ¡Listo! Ya estás verificado/a y recibiste ${rol}.`,
-                    ephemeral: true
+                        `✅ ¡Listo! Recibiste ${rol}.`,
+                    ephemeral:
+                        true
                 });
 
                 const embed =
                     new EmbedBuilder()
-                        .setColor(0x57F287)
-                        .setTitle("🛡️ USUARIO VERIFICADO")
+                        .setColor(
+                            0x57F287
+                        )
+                        .setTitle(
+                            "🛡️ USUARIO VERIFICADO"
+                        )
                         .addFields(
                             {
-                                name: "👤 Usuario",
+                                name:
+                                    "👤 Usuario",
                                 value:
                                     `${interaction.user}`
                             },
                             {
-                                name: "🆔 ID",
+                                name:
+                                    "🆔 ID",
                                 value:
                                     interaction.user.id
                             }
@@ -1352,30 +1654,44 @@ client.on(
                 return;
             }
 
+            // =========================================
+            // CREAR TICKET
+            // =========================================
+
             if (
                 interaction.isButton() &&
                 interaction.customId ===
-                "crear_ticket"
+                    "crear_ticket"
             ) {
-
                 await interaction.deferReply({
-                    ephemeral: true
+                    ephemeral:
+                        true
                 });
 
-                const guild =
-                    interaction.guild;
+                const config =
+                    obtenerConfig(
+                        interaction.guild.id
+                    );
+
+                if (
+                    !config.tickets.category
+                ) {
+                    return interaction.editReply({
+                        content:
+                            "❌ El sistema de tickets todavía no está configurado."
+                    });
+                }
 
                 const categoria =
-                    await guild.channels.fetch(
-                        TICKET_CATEGORY_ID
+                    await interaction.guild.channels.fetch(
+                        config.tickets.category
                     );
 
                 if (
                     !categoria ||
                     categoria.type !==
-                    ChannelType.GuildCategory
+                        ChannelType.GuildCategory
                 ) {
-
                     return interaction.editReply({
                         content:
                             "❌ La categoría de tickets no existe."
@@ -1383,16 +1699,15 @@ client.on(
                 }
 
                 const existente =
-                    guild.channels.cache.find(
+                    interaction.guild.channels.cache.find(
                         canal =>
                             canal.parentId ===
-                            TICKET_CATEGORY_ID &&
+                                config.tickets.category &&
                             canal.topic ===
-                            `ticket:${interaction.user.id}`
+                                `ticket:${interaction.user.id}`
                     );
 
                 if (existente) {
-
                     return interaction.editReply({
                         content:
                             `🎫 Ya tenés un ticket abierto: ${existente}`
@@ -1402,29 +1717,34 @@ client.on(
                 const nombre =
                     `ticket-${interaction.user.username}`
                         .toLowerCase()
-                        .replace(/[^a-z0-9-]/g, "")
-                        .substring(0, 80);
+                        .replace(
+                            /[^a-z0-9-]/g,
+                            ""
+                        )
+                        .substring(
+                            0,
+                            80
+                        );
 
                 const canal =
-                    await guild.channels.create({
-
+                    await interaction.guild.channels.create({
                         name:
-                            nombre || `ticket-${interaction.user.id}`,
+                            nombre ||
+                            `ticket-${interaction.user.id}`,
 
                         type:
                             ChannelType.GuildText,
 
                         parent:
-                            TICKET_CATEGORY_ID,
+                            config.tickets.category,
 
                         topic:
                             `ticket:${interaction.user.id}`,
 
                         permissionOverwrites: [
-
                             {
                                 id:
-                                    guild.roles.everyone.id,
+                                    interaction.guild.roles.everyone.id,
 
                                 deny: [
                                     PermissionFlagsBits.ViewChannel
@@ -1441,45 +1761,31 @@ client.on(
                                     PermissionFlagsBits.ReadMessageHistory,
                                     PermissionFlagsBits.AttachFiles
                                 ]
-                            },
-
-                            {
-                                id:
-                                    STAFF_ROLE_ID,
-
-                                allow: [
-                                    PermissionFlagsBits.ViewChannel,
-                                    PermissionFlagsBits.SendMessages,
-                                    PermissionFlagsBits.ReadMessageHistory,
-                                    PermissionFlagsBits.ManageMessages
-                                ]
-                            },
-
-                            {
-                                id:
-                                    MOD_ROLE_ID,
-
-                                allow: [
-                                    PermissionFlagsBits.ViewChannel,
-                                    PermissionFlagsBits.SendMessages,
-                                    PermissionFlagsBits.ReadMessageHistory,
-                                    PermissionFlagsBits.ManageMessages
-                                ]
-                            },
-
-                            {
-                                id:
-                                    OWNER_ROLE_ID,
-
-                                allow: [
-                                    PermissionFlagsBits.ViewChannel,
-                                    PermissionFlagsBits.SendMessages,
-                                    PermissionFlagsBits.ReadMessageHistory,
-                                    PermissionFlagsBits.ManageMessages
-                                ]
                             }
                         ]
                     });
+
+                // Roles de staff
+                const rolesStaff = [
+                    config.roles.owner,
+                    config.roles.staff,
+                    config.roles.mod
+                ].filter(Boolean);
+
+                for (
+                    const roleId
+                    of rolesStaff
+                ) {
+                    await canal.permissionOverwrites.edit(
+                        roleId,
+                        {
+                            ViewChannel: true,
+                            SendMessages: true,
+                            ReadMessageHistory: true,
+                            ManageMessages: true
+                        }
+                    );
+                }
 
                 await canal.send(
                     crearMensajeTicket(
@@ -1489,21 +1795,27 @@ client.on(
 
                 await interaction.editReply({
                     content:
-                        `🎫 Tu ticket fue creado correctamente: ${canal}`
+                        `🎫 Ticket creado correctamente: ${canal}`
                 });
 
                 const embed =
                     new EmbedBuilder()
-                        .setColor(0x57F287)
-                        .setTitle("🎫 TICKET CREADO")
+                        .setColor(
+                            0x57F287
+                        )
+                        .setTitle(
+                            "🎫 TICKET CREADO"
+                        )
                         .addFields(
                             {
-                                name: "👤 Usuario",
+                                name:
+                                    "👤 Usuario",
                                 value:
                                     `${interaction.user}`
                             },
                             {
-                                name: "📍 Ticket",
+                                name:
+                                    "📍 Ticket",
                                 value:
                                     `${canal}`
                             }
@@ -1511,53 +1823,65 @@ client.on(
                         .setTimestamp();
 
                 await enviarLog(
-                    guild,
+                    interaction.guild,
                     embed
                 );
 
                 return;
             }
 
+            // =========================================
+            // CERRAR TICKET
+            // =========================================
+
             if (
                 interaction.isButton() &&
                 interaction.customId ===
-                "cerrar_ticket"
+                    "cerrar_ticket"
             ) {
-
                 const canal =
                     interaction.channel;
+
+                const config =
+                    obtenerConfig(
+                        interaction.guild.id
+                    );
 
                 if (
                     !canal ||
                     canal.type !==
-                    ChannelType.GuildText
+                        ChannelType.GuildText
                 ) {
-
                     return interaction.reply({
                         content:
                             "❌ Este botón solo funciona dentro de un ticket.",
-                        ephemeral: true
+                        ephemeral:
+                            true
                     });
                 }
 
                 if (
                     canal.parentId !==
-                    TICKET_CATEGORY_ID
+                    config.tickets.category
                 ) {
-
                     return interaction.reply({
                         content:
                             "❌ Este canal no es un ticket.",
-                        ephemeral: true
+                        ephemeral:
+                            true
                     });
                 }
 
-                if (!esStaff(interaction)) {
-
+                if (
+                    !esStaff(
+                        interaction
+                    )
+                ) {
                     return interaction.reply({
                         content:
                             "❌ Solo Staff, Moderadores u Owner pueden cerrar tickets.",
-                        ephemeral: true
+                        ephemeral:
+                            true
                     });
                 }
 
@@ -1568,16 +1892,22 @@ client.on(
 
                 const embed =
                     new EmbedBuilder()
-                        .setColor(0xED4245)
-                        .setTitle("🔒 TICKET CERRADO")
+                        .setColor(
+                            0xED4245
+                        )
+                        .setTitle(
+                            "🔒 TICKET CERRADO"
+                        )
                         .addFields(
                             {
-                                name: "📍 Ticket",
+                                name:
+                                    "📍 Ticket",
                                 value:
                                     canal.name
                             },
                             {
-                                name: "👤 Cerrado por",
+                                name:
+                                    "👤 Cerrado por",
                                 value:
                                     `${interaction.user}`
                             }
@@ -1595,12 +1925,7 @@ client.on(
                             await canal.delete(
                                 "Ticket cerrado"
                             );
-                        } catch (error) {
-                            console.error(
-                                "❌ No se pudo eliminar el ticket:",
-                                error.message || error
-                            );
-                        }
+                        } catch {}
                     },
                     3000
                 );
@@ -1608,18 +1933,300 @@ client.on(
                 return;
             }
 
-            if (!interaction.isChatInputCommand()) {
+            // =========================================
+            // SOLO SLASH COMMANDS
+            // =========================================
+
+            if (
+                !interaction.isChatInputCommand()
+            ) {
                 return;
             }
+
+            const guild =
+                interaction.guild;
+
+            if (!guild) {
+                return interaction.reply({
+                    content:
+                        "❌ Este comando solo funciona en un servidor.",
+                    ephemeral:
+                        true
+                });
+            }
+
+            const config =
+                obtenerConfig(
+                    guild.id
+                );
+
+            // =========================================
+            // SETUP
+            // =========================================
+
+            if (
+                interaction.commandName ===
+                "setup"
+            ) {
+                if (
+                    !interaction.member.permissions.has(
+                        PermissionFlagsBits.Administrator
+                    )
+                ) {
+                    return interaction.reply({
+                        content:
+                            "❌ Necesitás permisos de Administrador.",
+                        ephemeral:
+                            true
+                    });
+                }
+
+                const sub =
+                    interaction.options.getSubcommand();
+
+                // -------------------------------------
+                // BIENVENIDA
+                // -------------------------------------
+
+                if (
+                    sub ===
+                    "bienvenida"
+                ) {
+                    const canal =
+                        interaction.options.getChannel(
+                            "canal"
+                        );
+
+                    config.channels.welcome =
+                        canal.id;
+
+                    config.welcome.enabled =
+                        true;
+
+                    guardarDatos();
+
+                    return interaction.reply({
+                        content:
+                            `✅ Bienvenidas configuradas.\n\n👋 Canal: ${canal}`,
+                        ephemeral:
+                            true
+                    });
+                }
+
+                // -------------------------------------
+                // VERIFICACIÓN
+                // -------------------------------------
+
+                if (
+                    sub ===
+                    "verificacion"
+                ) {
+                    const canal =
+                        interaction.options.getChannel(
+                            "canal"
+                        );
+
+                    const rol =
+                        interaction.options.getRole(
+                            "rol"
+                        );
+
+                    config.channels.verify =
+                        canal.id;
+
+                    config.roles.verify =
+                        rol.id;
+
+                    config.verification.enabled =
+                        true;
+
+                    guardarDatos();
+
+                    return interaction.reply({
+                        content:
+                            `✅ Verificación configurada.\n\n` +
+                            `📍 Canal: ${canal}\n` +
+                            `🛡️ Rol: ${rol}`,
+                        ephemeral:
+                            true
+                    });
+                }
+
+                // -------------------------------------
+                // LOGS
+                // -------------------------------------
+
+                if (
+                    sub ===
+                    "logs"
+                ) {
+                    const canal =
+                        interaction.options.getChannel(
+                            "canal"
+                        );
+
+                    config.channels.logs =
+                        canal.id;
+
+                    guardarDatos();
+
+                    return interaction.reply({
+                        content:
+                            `✅ Canal de logs configurado: ${canal}`,
+                        ephemeral:
+                            true
+                    });
+                }
+
+                // -------------------------------------
+                // TICKETS
+                // -------------------------------------
+
+                if (
+                    sub ===
+                    "tickets"
+                ) {
+                    const canal =
+                        interaction.options.getChannel(
+                            "canal"
+                        );
+
+                    const categoria =
+                        interaction.options.getChannel(
+                            "categoria"
+                        );
+
+                    config.channels.ticketPanel =
+                        canal.id;
+
+                    config.tickets.category =
+                        categoria.id;
+
+                    guardarDatos();
+
+                    return interaction.reply({
+                        content:
+                            `✅ Sistema de tickets configurado.\n\n` +
+                            `🎫 Panel: ${canal}\n` +
+                            `📁 Categoría: ${categoria}`,
+                        ephemeral:
+                            true
+                    });
+                }
+
+                // -------------------------------------
+                // ROLES
+                // -------------------------------------
+
+                if (
+                    sub ===
+                    "roles"
+                ) {
+                    const owner =
+                        interaction.options.getRole(
+                            "owner"
+                        );
+
+                    const staff =
+                        interaction.options.getRole(
+                            "staff"
+                        );
+
+                    const mod =
+                        interaction.options.getRole(
+                            "mod"
+                        );
+
+                    if (owner) {
+                        config.roles.owner =
+                            owner.id;
+                    }
+
+                    if (staff) {
+                        config.roles.staff =
+                            staff.id;
+                    }
+
+                    if (mod) {
+                        config.roles.mod =
+                            mod.id;
+                    }
+
+                    guardarDatos();
+
+                    return interaction.reply({
+                        content:
+                            "✅ Roles configurados correctamente.",
+                        ephemeral:
+                            true
+                    });
+                }
+
+                // -------------------------------------
+                // IP
+                // -------------------------------------
+
+                if (
+                    sub ===
+                    "ip"
+                ) {
+                    const direccion =
+                        interaction.options.getString(
+                            "direccion"
+                        );
+
+                    const puerto =
+                        interaction.options.getInteger(
+                            "puerto"
+                        );
+
+                    config.ip.enabled =
+                        true;
+
+                    config.ip.address =
+                        direccion;
+
+                    config.ip.port =
+                        puerto;
+
+                    guardarDatos();
+
+                    return interaction.reply({
+                        content:
+                            `✅ IP configurada correctamente.\n\n` +
+                            `🌐 IP: \`${direccion}\`\n` +
+                            `🔌 Puerto: \`${puerto}\``,
+                        ephemeral:
+                            true
+                    });
+                }
+            }
+
+            // =========================================
+            // IP
+            // =========================================
 
             if (
                 interaction.commandName ===
                 "ip"
             ) {
+                if (
+                    !config.ip.enabled ||
+                    !config.ip.address
+                ) {
+                    return interaction.reply({
+                        content:
+                            "❌ Este servidor todavía no configuró su IP.\n\nUsá `/setup ip`.",
+                        ephemeral:
+                            true
+                    });
+                }
 
                 const embed =
                     new EmbedBuilder()
-                        .setColor(0x57F287)
+                        .setColor(
+                            0x57F287
+                        )
                         .setTitle(
                             "🎮 SERVIDOR DE MINECRAFT"
                         )
@@ -1628,84 +2235,215 @@ client.on(
                         )
                         .addFields(
                             {
-                                name: "🌐 IP",
+                                name:
+                                    "🌐 IP",
                                 value:
-                                    "`mc.laordenmorada.lat`"
+                                    `\`${config.ip.address}\``
                             },
                             {
-                                name: "🔌 PUERTO",
+                                name:
+                                    "🔌 PUERTO",
                                 value:
-                                    "`19527`"
+                                    `\`${config.ip.port}\``
                             }
                         )
                         .setFooter({
                             text:
-                                "La Orden Morada"
+                                guild.name
                         })
                         .setTimestamp();
 
                 return interaction.reply({
-                    embeds: [embed]
+                    embeds: [
+                        embed
+                    ]
                 });
             }
+
+            // =========================================
+            // CREATE
+            // =========================================
 
             if (
                 interaction.commandName ===
                 "create"
             ) {
-
-                if (!esOwner(interaction)) {
-
+                if (
+                    !esOwner(
+                        interaction
+                    )
+                ) {
                     return interaction.reply({
                         content:
-                            "❌ Solo el Owner puede utilizar este comando.",
-                        ephemeral: true
+                            "❌ Solo el Owner o Administrador puede usar este comando.",
+                        ephemeral:
+                            true
                     });
                 }
 
-                const texto =
-                    interaction.options.getString(
-                        "texto"
+                const sub =
+                    interaction.options.getSubcommand();
+
+                // -------------------------------------
+                // VERIFICACIÓN
+                // -------------------------------------
+
+                if (
+                    sub ===
+                    "verificacion"
+                ) {
+                    if (
+                        !config.verification.enabled ||
+                        !config.channels.verify ||
+                        !config.roles.verify
+                    ) {
+                        return interaction.reply({
+                            content:
+                                "❌ Primero configurá `/setup verificacion`.",
+                            ephemeral:
+                                true
+                        });
+                    }
+
+                    const canal =
+                        await guild.channels.fetch(
+                            config.channels.verify
+                        );
+
+                    if (
+                        !canal ||
+                        !canal.isTextBased()
+                    ) {
+                        return interaction.reply({
+                            content:
+                                "❌ El canal configurado no existe.",
+                            ephemeral:
+                                true
+                        });
+                    }
+
+                    await canal.send(
+                        crearPanelVerificacion(
+                            guild.name
+                        )
                     );
 
-                if (!texto) {
-
                     return interaction.reply({
                         content:
-                            "❌ Tenés que escribir un texto.",
-                        ephemeral: true
+                            `✅ Panel de verificación creado en ${canal}.`,
+                        ephemeral:
+                            true
                     });
                 }
 
-                if (texto.length > 4096) {
+                // -------------------------------------
+                // TICKETS
+                // -------------------------------------
+
+                if (
+                    sub ===
+                    "tickets"
+                ) {
+                    if (
+                        !config.channels.ticketPanel ||
+                        !config.tickets.category
+                    ) {
+                        return interaction.reply({
+                            content:
+                                "❌ Primero configurá `/setup tickets`.",
+                            ephemeral:
+                                true
+                        });
+                    }
+
+                    const canal =
+                        await guild.channels.fetch(
+                            config.channels.ticketPanel
+                        );
+
+                    if (
+                        !canal ||
+                        !canal.isTextBased()
+                    ) {
+                        return interaction.reply({
+                            content:
+                                "❌ El canal del panel no existe.",
+                            ephemeral:
+                                true
+                        });
+                    }
+
+                    await canal.send(
+                        crearPanelTickets(
+                            guild.name
+                        )
+                    );
 
                     return interaction.reply({
                         content:
-                            "❌ El texto no puede superar los 4096 caracteres.",
-                        ephemeral: true
+                            `✅ Panel de tickets creado en ${canal}.`,
+                        ephemeral:
+                            true
                     });
                 }
 
-                const embed =
-                    new EmbedBuilder()
-                        .setColor(0x8E44AD)
-                        .setDescription(texto)
-                        .setFooter({
-                            text:
-                                "La Orden Morada"
-                        })
-                        .setTimestamp();
+                // -------------------------------------
+                // MENSAJE
+                // -------------------------------------
 
-                await interaction.channel.send({
-                    embeds: [embed]
-                });
+                if (
+                    sub ===
+                    "msj"
+                ) {
+                    const texto =
+                        interaction.options.getString(
+                            "texto"
+                        );
 
-                return interaction.reply({
-                    content:
-                        "✅ Mensaje creado correctamente.",
-                    ephemeral: true
-                });
+                    if (
+                        texto.length >
+                        4096
+                    ) {
+                        return interaction.reply({
+                            content:
+                                "❌ El mensaje no puede superar 4096 caracteres.",
+                            ephemeral:
+                                true
+                        });
+                    }
+
+                    const embed =
+                        new EmbedBuilder()
+                            .setColor(
+                                0x8E44AD
+                            )
+                            .setDescription(
+                                texto
+                            )
+                            .setFooter({
+                                text:
+                                    guild.name
+                            })
+                            .setTimestamp();
+
+                    await interaction.channel.send({
+                        embeds: [
+                            embed
+                        ]
+                    });
+
+                    return interaction.reply({
+                        content:
+                            "✅ Mensaje creado correctamente.",
+                        ephemeral:
+                            true
+                    });
+                }
             }
+
+            // =========================================
+            // COMANDOS STAFF
+            // =========================================
 
             const comandosStaff = [
                 "ban",
@@ -1725,22 +2463,28 @@ client.on(
                     interaction.commandName
                 )
             ) {
-
-                if (!esStaff(interaction)) {
-
+                if (
+                    !esStaff(
+                        interaction
+                    )
+                ) {
                     return interaction.reply({
                         content:
                             "❌ No tenés permisos para utilizar este comando.",
-                        ephemeral: true
+                        ephemeral:
+                            true
                     });
                 }
             }
+
+            // =========================================
+            // WARN
+            // =========================================
 
             if (
                 interaction.commandName ===
                 "warn"
             ) {
-
                 const usuario =
                     interaction.options.getUser(
                         "usuario"
@@ -1752,7 +2496,7 @@ client.on(
                     );
 
                 const miembro =
-                    await interaction.guild.members.fetch(
+                    await guild.members.fetch(
                         usuario.id
                     );
 
@@ -1762,25 +2506,27 @@ client.on(
                         miembro
                     )
                 ) {
-
                     return interaction.reply({
                         content:
-                            "❌ No podés moderar a un usuario con un rol igual o superior al tuyo.",
-                        ephemeral: true
+                            "❌ No podés moderar a un usuario con un rol igual o superior.",
+                        ephemeral:
+                            true
                     });
                 }
 
-                const clave =
-                    `${interaction.guild.id}:${usuario.id}`;
-
-                if (!warnings.has(clave)) {
-                    warnings.set(clave, []);
+                if (
+                    !config.warnings[
+                        usuario.id
+                    ]
+                ) {
+                    config.warnings[
+                        usuario.id
+                    ] = [];
                 }
 
-                const lista =
-                    warnings.get(clave);
-
-                lista.push({
+                config.warnings[
+                    usuario.id
+                ].push({
                     motivo,
                     moderador:
                         interaction.user.id,
@@ -1788,31 +2534,38 @@ client.on(
                         Date.now()
                 });
 
+                guardarDatos();
+
                 const embed =
                     new EmbedBuilder()
-                        .setColor(0xF1C40F)
-                        .setTitle("⚠️ ADVERTENCIA")
-                        .setDescription(
-                            `${usuario} recibió una advertencia.`
+                        .setColor(
+                            0xF1C40F
+                        )
+                        .setTitle(
+                            "⚠️ ADVERTENCIA"
                         )
                         .addFields(
                             {
-                                name: "👤 Usuario",
+                                name:
+                                    "👤 Usuario",
                                 value:
                                     `${usuario}`
                             },
                             {
-                                name: "📝 Motivo",
+                                name:
+                                    "📝 Motivo",
                                 value:
                                     motivo
                             },
                             {
-                                name: "📊 Advertencias",
+                                name:
+                                    "📊 Advertencias",
                                 value:
-                                    `${lista.length}`
+                                    `${config.warnings[usuario.id].length}`
                             },
                             {
-                                name: "🛡️ Moderador",
+                                name:
+                                    "🛡️ Moderador",
                                 value:
                                     `${interaction.user}`
                             }
@@ -1820,39 +2573,46 @@ client.on(
                         .setTimestamp();
 
                 await interaction.reply({
-                    embeds: [embed]
+                    embeds: [
+                        embed
+                    ]
                 });
 
                 await enviarLog(
-                    interaction.guild,
+                    guild,
                     embed
                 );
 
                 return;
             }
 
+            // =========================================
+            // WARNINGS
+            // =========================================
+
             if (
                 interaction.commandName ===
                 "warnings"
             ) {
-
                 const usuario =
                     interaction.options.getUser(
                         "usuario"
                     );
 
-                const clave =
-                    `${interaction.guild.id}:${usuario.id}`;
-
                 const lista =
-                    warnings.get(clave) || [];
+                    config.warnings[
+                        usuario.id
+                    ] || [];
 
-                if (lista.length === 0) {
-
+                if (
+                    lista.length ===
+                    0
+                ) {
                     return interaction.reply({
                         content:
                             `📋 ${usuario} no tiene advertencias.`,
-                        ephemeral: true
+                        ephemeral:
+                            true
                     });
                 }
 
@@ -1862,11 +2622,15 @@ client.on(
                             (warn, index) =>
                                 `**${index + 1}.** ${warn.motivo}\n<@${warn.moderador}> • <t:${Math.floor(warn.fecha / 1000)}:R>`
                         )
-                        .join("\n\n");
+                        .join(
+                            "\n\n"
+                        );
 
                 const embed =
                     new EmbedBuilder()
-                        .setColor(0xF1C40F)
+                        .setColor(
+                            0xF1C40F
+                        )
                         .setTitle(
                             "📋 HISTORIAL DE ADVERTENCIAS"
                         )
@@ -1876,173 +2640,29 @@ client.on(
                         .setTimestamp();
 
                 return interaction.reply({
-                    embeds: [embed],
-                    ephemeral: true
-                });
-            }
-
-            if (
-                interaction.commandName ===
-                "clear"
-            ) {
-
-                const cantidad =
-                    interaction.options.getInteger(
-                        "cantidad"
-                    );
-
-                if (
-                    !interaction.channel ||
-                    !interaction.channel.isTextBased()
-                ) {
-
-                    return interaction.reply({
-                        content:
-                            "❌ Este comando no puede utilizarse aquí.",
-                        ephemeral: true
-                    });
-                }
-
-                await interaction.deferReply({
-                    ephemeral: true
-                });
-
-                const mensajes =
-                    await interaction.channel.bulkDelete(
-                        cantidad,
+                    embeds: [
+                        embed
+                    ],
+                    ephemeral:
                         true
-                    );
-
-                const embed =
-                    new EmbedBuilder()
-                        .setColor(0x57F287)
-                        .setTitle("🧹 MENSAJES ELIMINADOS")
-                        .addFields(
-                            {
-                                name: "📊 Cantidad",
-                                value:
-                                    `${mensajes.size}`
-                            },
-                            {
-                                name: "🛡️ Moderador",
-                                value:
-                                    `${interaction.user}`
-                            },
-                            {
-                                name: "📍 Canal",
-                                value:
-                                    `${interaction.channel}`
-                            }
-                        )
-                        .setTimestamp();
-
-                await interaction.editReply({
-                    embeds: [embed]
                 });
-
-                await enviarLog(
-                    interaction.guild,
-                    embed
-                );
-
-                return;
             }
 
-            if (
-                interaction.commandName ===
-                "slowmode"
-            ) {
-
-                const entrada =
-                    interaction.options.getString(
-                        "tiempo"
-                    );
-
-                const segundos =
-                    convertirDuracion(entrada);
-
-                if (segundos === null) {
-
-                    return interaction.reply({
-                        content:
-                            "❌ Usa `5s`, `10s`, `1m`, `5m` o `1h`.",
-                        ephemeral: true
-                    });
-                }
-
-                const segundosFinal =
-                    Math.floor(
-                        segundos / 1000
-                    );
-
-                if (
-                    segundosFinal < 0 ||
-                    segundosFinal > 21600
-                ) {
-
-                    return interaction.reply({
-                        content:
-                            "❌ El slowmode debe estar entre 0 y 6 horas.",
-                        ephemeral: true
-                    });
-                }
-
-                if (
-                    !interaction.channel ||
-                    typeof interaction.channel.setRateLimitPerUser !==
-                    "function"
-                ) {
-
-                    return interaction.reply({
-                        content:
-                            "❌ Este canal no permite configurar slowmode.",
-                        ephemeral: true
-                    });
-                }
-
-                await interaction.channel.setRateLimitPerUser(
-                    segundosFinal,
-                    `Slowmode por ${interaction.user.tag}`
-                );
-
-                const embed =
-                    new EmbedBuilder()
-                        .setColor(0x5865F2)
-                        .setTitle("🐢 SLOWMODE CONFIGURADO")
-                        .setDescription(
-                            `El slowmode de este canal ahora es de **${segundosFinal} segundos**.`
-                        )
-                        .addFields({
-                            name: "🛡️ Configurado por",
-                            value:
-                                `${interaction.user}`
-                        })
-                        .setTimestamp();
-
-                await interaction.reply({
-                    embeds: [embed]
-                });
-
-                await enviarLog(
-                    interaction.guild,
-                    embed
-                );
-
-                return;
-            }
+            // =========================================
+            // BAN
+            // =========================================
 
             if (
                 interaction.commandName ===
                 "ban"
             ) {
-
                 const usuario =
                     interaction.options.getUser(
                         "usuario"
                     );
 
                 const miembro =
-                    await interaction.guild.members.fetch(
+                    await guild.members.fetch(
                         usuario.id
                     );
 
@@ -2052,41 +2672,43 @@ client.on(
                         miembro
                     )
                 ) {
-
                     return interaction.reply({
                         content:
-                            "❌ No podés banear a un usuario con un rol igual o superior al tuyo.",
-                        ephemeral: true
+                            "❌ No podés banear a ese usuario.",
+                        ephemeral:
+                            true
                     });
                 }
 
                 await miembro.ban({
                     reason:
-                        `Ban aplicado por ${interaction.user.tag}`
+                        `Ban por ${interaction.user.tag}`
                 });
 
                 const embed =
                     new EmbedBuilder()
-                        .setColor(0xED4245)
+                        .setColor(
+                            0xED4245
+                        )
                         .setTitle(
                             "🔨 USUARIO BANEADO"
                         )
-                        .setDescription(
-                            `${usuario} fue baneado del servidor.`
-                        )
                         .addFields(
                             {
-                                name: "👤 Usuario",
+                                name:
+                                    "👤 Usuario",
                                 value:
                                     `${usuario}`
                             },
                             {
-                                name: "🆔 ID",
+                                name:
+                                    "🆔 ID",
                                 value:
                                     usuario.id
                             },
                             {
-                                name: "🛡️ Moderador",
+                                name:
+                                    "🛡️ Moderador",
                                 value:
                                     `${interaction.user}`
                             }
@@ -2094,22 +2716,27 @@ client.on(
                         .setTimestamp();
 
                 await interaction.reply({
-                    embeds: [embed]
+                    embeds: [
+                        embed
+                    ]
                 });
 
                 await enviarLog(
-                    interaction.guild,
+                    guild,
                     embed
                 );
 
                 return;
             }
 
+            // =========================================
+            // MUTE
+            // =========================================
+
             if (
                 interaction.commandName ===
                 "mute"
             ) {
-
                 const usuario =
                     interaction.options.getUser(
                         "usuario"
@@ -2121,7 +2748,7 @@ client.on(
                     );
 
                 const miembro =
-                    await interaction.guild.members.fetch(
+                    await guild.members.fetch(
                         usuario.id
                     );
 
@@ -2131,27 +2758,18 @@ client.on(
                         miembro
                     )
                 ) {
-
                     return interaction.reply({
                         content:
-                            "❌ No podés mutear a un usuario con un rol igual o superior al tuyo.",
-                        ephemeral: true
+                            "❌ No podés mutear a ese usuario.",
+                        ephemeral:
+                            true
                     });
                 }
 
                 const tiempo =
-                    convertirDuracion(duracion);
-
-                if (
-                    tiempo === null
-                ) {
-
-                    return interaction.reply({
-                        content:
-                            "❌ Usa `30s`, `5m`, `1h` o `1d`.",
-                        ephemeral: true
-                    });
-                }
+                    convertirDuracion(
+                        duracion
+                    );
 
                 const maximo =
                     28 *
@@ -2161,44 +2779,47 @@ client.on(
                     1000;
 
                 if (
+                    tiempo === null ||
                     tiempo <= 0 ||
                     tiempo > maximo
                 ) {
-
                     return interaction.reply({
                         content:
-                            "❌ La duración debe estar entre 1 segundo y 28 días.",
-                        ephemeral: true
+                            "❌ Usá una duración válida: `30s`, `5m`, `1h` o `1d`.",
+                        ephemeral:
+                            true
                     });
                 }
 
                 await miembro.timeout(
                     tiempo,
-                    `Mute aplicado por ${interaction.user.tag}`
+                    `Mute por ${interaction.user.tag}`
                 );
 
                 const embed =
                     new EmbedBuilder()
-                        .setColor(0x5865F2)
+                        .setColor(
+                            0x5865F2
+                        )
                         .setTitle(
                             "🔇 USUARIO SILENCIADO"
                         )
-                        .setDescription(
-                            `${usuario} fue silenciado correctamente.`
-                        )
                         .addFields(
                             {
-                                name: "👤 Usuario",
+                                name:
+                                    "👤 Usuario",
                                 value:
                                     `${usuario}`
                             },
                             {
-                                name: "⏱️ Duración",
+                                name:
+                                    "⏱️ Duración",
                                 value:
                                     duracion
                             },
                             {
-                                name: "🛡️ Moderador",
+                                name:
+                                    "🛡️ Moderador",
                                 value:
                                     `${interaction.user}`
                             }
@@ -2206,29 +2827,34 @@ client.on(
                         .setTimestamp();
 
                 await interaction.reply({
-                    embeds: [embed]
+                    embeds: [
+                        embed
+                    ]
                 });
 
                 await enviarLog(
-                    interaction.guild,
+                    guild,
                     embed
                 );
 
                 return;
             }
 
+            // =========================================
+            // UNMUTE
+            // =========================================
+
             if (
                 interaction.commandName ===
                 "unmute"
             ) {
-
                 const usuario =
                     interaction.options.getUser(
                         "usuario"
                     );
 
                 const miembro =
-                    await interaction.guild.members.fetch(
+                    await guild.members.fetch(
                         usuario.id
                     );
 
@@ -2238,461 +2864,334 @@ client.on(
                         miembro
                     )
                 ) {
-
                     return interaction.reply({
                         content:
-                            "❌ No podés modificar a este usuario por su jerarquía.",
-                        ephemeral: true
+                            "❌ No podés modificar a este usuario.",
+                        ephemeral:
+                            true
                     });
                 }
 
                 await miembro.timeout(
                     null,
-                    `Mute quitado por ${interaction.user.tag}`
+                    `Unmute por ${interaction.user.tag}`
                 );
 
-                const embed =
-                    new EmbedBuilder()
-                        .setColor(0x57F287)
-                        .setTitle(
-                            "🔊 MUTE REMOVIDO"
-                        )
-                        .setDescription(
-                            `${usuario} ya puede volver a hablar.`
-                        )
-                        .addFields(
-                            {
-                                name: "👤 Usuario",
-                                value:
-                                    `${usuario}`
-                            },
-                            {
-                                name: "🛡️ Moderador",
-                                value:
-                                    `${interaction.user}`
-                            }
-                        )
-                        .setTimestamp();
-
-                await interaction.reply({
-                    embeds: [embed]
+                return interaction.reply({
+                    content:
+                        `🔊 ${usuario} ya puede hablar nuevamente.`
                 });
-
-                await enviarLog(
-                    interaction.guild,
-                    embed
-                );
-
-                return;
             }
+
+            // =========================================
+            // UNBAN
+            // =========================================
 
             if (
                 interaction.commandName ===
                 "unban"
             ) {
-
                 const id =
                     interaction.options.getString(
                         "id"
                     ).trim();
 
-                if (!/^\d{17,20}$/.test(id)) {
-
+                if (
+                    !/^\d{17,20}$/.test(
+                        id
+                    )
+                ) {
                     return interaction.reply({
                         content:
-                            "❌ La ID de Discord no es válida.",
-                        ephemeral: true
+                            "❌ ID de Discord inválida.",
+                        ephemeral:
+                            true
                     });
                 }
 
-                await interaction.guild.members.unban(
+                await guild.members.unban(
                     id,
-                    `Unban realizado por ${interaction.user.tag}`
+                    `Unban por ${interaction.user.tag}`
                 );
+
+                return interaction.reply({
+                    content:
+                        `🔓 Usuario \`${id}\` desbaneado correctamente.`
+                });
+            }
+
+            // =========================================
+            // CLEAR
+            // =========================================
+
+            if (
+                interaction.commandName ===
+                "clear"
+            ) {
+                const cantidad =
+                    interaction.options.getInteger(
+                        "cantidad"
+                    );
+
+                if (
+                    !interaction.channel ||
+                    !interaction.channel.isTextBased()
+                ) {
+                    return interaction.reply({
+                        content:
+                            "❌ Este comando no puede utilizarse aquí.",
+                        ephemeral:
+                            true
+                    });
+                }
+
+                await interaction.deferReply({
+                    ephemeral:
+                        true
+                });
+
+                const mensajes =
+                    await interaction.channel.bulkDelete(
+                        cantidad,
+                        true
+                    );
 
                 const embed =
                     new EmbedBuilder()
-                        .setColor(0x57F287)
-                        .setTitle(
-                            "🔓 USUARIO DESBANEADO"
+                        .setColor(
+                            0x57F287
                         )
-                        .setDescription(
-                            `El usuario con ID \`${id}\` fue desbaneado.`
+                        .setTitle(
+                            "🧹 MENSAJES ELIMINADOS"
                         )
                         .addFields(
                             {
-                                name: "🆔 ID",
+                                name:
+                                    "📊 Cantidad",
                                 value:
-                                    id
+                                    `${mensajes.size}`
                             },
                             {
-                                name: "🛡️ Moderador",
+                                name:
+                                    "🛡️ Moderador",
                                 value:
                                     `${interaction.user}`
+                            },
+                            {
+                                name:
+                                    "📍 Canal",
+                                value:
+                                    `${interaction.channel}`
                             }
                         )
                         .setTimestamp();
 
-                await interaction.reply({
-                    embeds: [embed]
+                await interaction.editReply({
+                    embeds: [
+                        embed
+                    ]
                 });
 
                 await enviarLog(
-                    interaction.guild,
+                    guild,
                     embed
                 );
 
                 return;
             }
 
+            // =========================================
+            // SLOWMODE
+            // =========================================
+
             if (
                 interaction.commandName ===
-                "lock"
+                "slowmode"
             ) {
+                const entrada =
+                    interaction.options.getString(
+                        "tiempo"
+                    );
 
-                const subcomando =
-                    interaction.options.getSubcommand();
-
-                await interaction.deferReply();
+                const tiempo =
+                    convertirDuracion(
+                        entrada
+                    );
 
                 if (
-                    subcomando ===
-                    "canal"
+                    tiempo === null
                 ) {
-
-                    const canal =
-                        interaction.channel;
-
-                    if (
-                        !canal ||
-                        !canal.permissionOverwrites
-                    ) {
-
-                        return interaction.editReply({
-                            content:
-                                "❌ Este canal no puede bloquearse."
-                        });
-                    }
-
-                    await canal.permissionOverwrites.edit(
-                        interaction.guild.roles.everyone,
-                        {
-                            SendMessages: false
-                        },
-                        {
-                            reason:
-                                `Lock por ${interaction.user.tag}`
-                        }
-                    );
-
-                    const embed =
-                        new EmbedBuilder()
-                            .setColor(0xED4245)
-                            .setTitle(
-                                "🔒 CANAL BLOQUEADO"
-                            )
-                            .setDescription(
-                                "🚫 Los usuarios no pueden enviar mensajes en este canal."
-                            )
-                            .addFields({
-                                name: "🛡️ Bloqueado por",
-                                value:
-                                    `${interaction.user}`
-                            })
-                            .setTimestamp();
-
-                    await interaction.editReply({
-                        embeds: [embed]
+                    return interaction.reply({
+                        content:
+                            "❌ Usá `5s`, `10s`, `1m`, `5m` o `1h`.",
+                        ephemeral:
+                            true
                     });
-
-                    await enviarLog(
-                        interaction.guild,
-                        embed
-                    );
-
-                    return;
                 }
+
+                const segundos =
+                    Math.floor(
+                        tiempo /
+                        1000
+                    );
 
                 if (
-                    subcomando ===
-                    "general"
+                    segundos >
+                    21600
                 ) {
-
-                    const canales =
-                        await interaction.guild.channels.fetch();
-
-                    let bloqueados = 0;
-
-                    for (
-                        const [, canal]
-                        of canales
-                    ) {
-
-                        if (
-                            !canal ||
-                            ![
-                                ChannelType.GuildText,
-                                ChannelType.GuildAnnouncement
-                            ].includes(canal.type)
-                        ) {
-                            continue;
-                        }
-
-                        try {
-
-                            await canal.permissionOverwrites.edit(
-                                interaction.guild.roles.everyone,
-                                {
-                                    SendMessages: false
-                                },
-                                {
-                                    reason:
-                                        `Lock general por ${interaction.user.tag}`
-                                }
-                            );
-
-                            bloqueados++;
-
-                        } catch (error) {
-
-                            console.error(
-                                `❌ No se pudo bloquear #${canal.name}:`,
-                                error.message || error
-                            );
-                        }
-                    }
-
-                    const embed =
-                        new EmbedBuilder()
-                            .setColor(0xED4245)
-                            .setTitle(
-                                "🔒 SERVIDOR BLOQUEADO"
-                            )
-                            .setDescription(
-                                "🚨 Se realizó un bloqueo general."
-                            )
-                            .addFields(
-                                {
-                                    name: "📊 Canales bloqueados",
-                                    value:
-                                        `${bloqueados}`
-                                },
-                                {
-                                    name: "🛡️ Bloqueado por",
-                                    value:
-                                        `${interaction.user}`
-                                }
-                            )
-                            .setTimestamp();
-
-                    await interaction.editReply({
-                        embeds: [embed]
+                    return interaction.reply({
+                        content:
+                            "❌ El máximo es 6 horas.",
+                        ephemeral:
+                            true
                     });
-
-                    await enviarLog(
-                        interaction.guild,
-                        embed
-                    );
-
-                    return;
                 }
+
+                await interaction.channel.setRateLimitPerUser(
+                    segundos,
+                    `Slowmode por ${interaction.user.tag}`
+                );
+
+                return interaction.reply({
+                    content:
+                        `🐢 Slowmode configurado en ${segundos} segundos.`
+                });
             }
 
+            // =========================================
+            // LOCK / UNLOCK
+            // =========================================
+
             if (
                 interaction.commandName ===
-                "unlock"
+                    "lock" ||
+                interaction.commandName ===
+                    "unlock"
             ) {
-
-                const subcomando =
+                const sub =
                     interaction.options.getSubcommand();
+
+                const bloquear =
+                    interaction.commandName ===
+                    "lock";
 
                 await interaction.deferReply();
 
                 if (
-                    subcomando ===
+                    sub ===
                     "canal"
                 ) {
-
                     const canal =
                         interaction.channel;
 
-                    if (
-                        !canal ||
-                        !canal.permissionOverwrites
-                    ) {
-
-                        return interaction.editReply({
-                            content:
-                                "❌ Este canal no puede desbloquearse."
-                        });
-                    }
-
                     await canal.permissionOverwrites.edit(
-                        interaction.guild.roles.everyone,
+                        guild.roles.everyone,
                         {
-                            SendMessages: null
-                        },
-                        {
-                            reason:
-                                `Unlock por ${interaction.user.tag}`
+                            SendMessages:
+                                bloquear
+                                    ? false
+                                    : null
                         }
                     );
 
-                    const embed =
-                        new EmbedBuilder()
-                            .setColor(0x57F287)
-                            .setTitle(
-                                "🔓 CANAL DESBLOQUEADO"
-                            )
-                            .setDescription(
-                                "🟢 El canal volvió a utilizar sus permisos normales."
-                            )
-                            .addFields({
-                                name: "🛡️ Desbloqueado por",
-                                value:
-                                    `${interaction.user}`
-                            })
-                            .setTimestamp();
-
-                    await interaction.editReply({
-                        embeds: [embed]
+                    return interaction.editReply({
+                        content:
+                            bloquear
+                                ? "🔒 Canal bloqueado."
+                                : "🔓 Canal desbloqueado."
                     });
-
-                    await enviarLog(
-                        interaction.guild,
-                        embed
-                    );
-
-                    return;
                 }
 
                 if (
-                    subcomando ===
+                    sub ===
                     "general"
                 ) {
-
                     const canales =
-                        await interaction.guild.channels.fetch();
+                        await guild.channels.fetch();
 
-                    let desbloqueados = 0;
+                    let cantidad =
+                        0;
 
                     for (
-                        const [, canal]
+                        const [
+                            ,
+                            canal
+                        ]
                         of canales
                     ) {
-
                         if (
                             !canal ||
                             ![
                                 ChannelType.GuildText,
                                 ChannelType.GuildAnnouncement
-                            ].includes(canal.type)
+                            ].includes(
+                                canal.type
+                            )
                         ) {
                             continue;
                         }
 
                         try {
-
                             await canal.permissionOverwrites.edit(
-                                interaction.guild.roles.everyone,
+                                guild.roles.everyone,
                                 {
-                                    SendMessages: null
-                                },
-                                {
-                                    reason:
-                                        `Unlock general por ${interaction.user.tag}`
+                                    SendMessages:
+                                        bloquear
+                                            ? false
+                                            : null
                                 }
                             );
 
-                            desbloqueados++;
-
-                        } catch (error) {
-
-                            console.error(
-                                `❌ No se pudo desbloquear #${canal.name}:`,
-                                error.message || error
-                            );
-                        }
+                            cantidad++;
+                        } catch {}
                     }
 
-                    const embed =
-                        new EmbedBuilder()
-                            .setColor(0x57F287)
-                            .setTitle(
-                                "🔓 SERVIDOR DESBLOQUEADO"
-                            )
-                            .setDescription(
-                                "🟢 Se realizó el desbloqueo general."
-                            )
-                            .addFields(
-                                {
-                                    name: "📊 Canales desbloqueados",
-                                    value:
-                                        `${desbloqueados}`
-                                },
-                                {
-                                    name: "🛡️ Desbloqueado por",
-                                    value:
-                                        `${interaction.user}`
-                                }
-                            )
-                            .setTimestamp();
-
-                    await interaction.editReply({
-                        embeds: [embed]
+                    return interaction.editReply({
+                        content:
+                            bloquear
+                                ? `🔒 ${cantidad} canales bloqueados.`
+                                : `🔓 ${cantidad} canales desbloqueados.`
                     });
-
-                    await enviarLog(
-                        interaction.guild,
-                        embed
-                    );
-
-                    return;
                 }
             }
 
         } catch (error) {
-
             console.error(
-                "❌ ERROR DEL BOT:",
+                "❌ ERROR INTERACTION:",
                 error
             );
 
             try {
-
                 if (
                     interaction.deferred ||
                     interaction.replied
                 ) {
-
                     await interaction.editReply({
                         content:
                             "❌ Ocurrió un error al ejecutar el comando."
                     });
-
                 } else {
-
                     await interaction.reply({
                         content:
                             "❌ Ocurrió un error al ejecutar el comando.",
-                        ephemeral: true
+                        ephemeral:
+                            true
                     });
                 }
-
             } catch {}
         }
     }
 );
 
 // =====================================================
-// ERRORES DEL CLIENTE
+// ERRORES
 // =====================================================
 
 client.on(
     "error",
     error => {
         console.error(
-            "❌ ERROR DEL CLIENTE DISCORD:",
+            "❌ ERROR DISCORD:",
             error
         );
     }
@@ -2707,10 +3206,6 @@ client.on(
         );
     }
 );
-
-// =====================================================
-// PROCESO
-// =====================================================
 
 process.on(
     "unhandledRejection",
@@ -2733,40 +3228,34 @@ process.on(
 );
 
 // =====================================================
-// COMPROBAR TOKEN
+// TOKEN
 // =====================================================
 
 if (!TOKEN) {
-
     console.error(
-        "❌ ERROR: No existe la variable DISCORD_TOKEN."
-    );
-
-    console.error(
-        "👉 En Wisbyte tenés que crear una variable de entorno llamada DISCORD_TOKEN con el token de tu bot."
+        "❌ No existe DISCORD_TOKEN."
     );
 
     process.exit(1);
 }
 
 // =====================================================
-// INICIO
+// INICIAR
 // =====================================================
 
 (async () => {
-
     try {
-
         await registrarComandos();
 
         console.log(
-            "🔐 Iniciando sesión en Discord..."
+            "🔐 Iniciando sesión..."
         );
 
-        await client.login(TOKEN);
+        await client.login(
+            TOKEN
+        );
 
     } catch (error) {
-
         console.error(
             "❌ NO SE PUDO INICIAR EL BOT:"
         );
@@ -2777,5 +3266,4 @@ if (!TOKEN) {
 
         process.exit(1);
     }
-
 })();
