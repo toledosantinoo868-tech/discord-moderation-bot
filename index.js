@@ -21,7 +21,11 @@ const {
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = "1552817688378605650";
 
-// ÚNICA PERSONA QUE PUEDE USAR LOS COMANDOS
+// =====================================================
+// IMPORTANTE:
+// PONÉ ACÁ TU ID REAL DE DISCORD
+// =====================================================
+
 const OWNER_USER_ID = "1531489394127536188";
 
 // CANALES FIJOS
@@ -85,11 +89,30 @@ function crearEmbed(color = BOT_COLOR) {
         .setTimestamp();
 }
 
+// =====================================================
+// COMPROBAR OWNER
+// =====================================================
+
 function esOwner(interaction) {
-    return interaction.user.id === OWNER_USER_ID;
+
+    const userId = String(interaction.user.id).trim();
+    const ownerId = String(OWNER_USER_ID).trim();
+
+    console.log("");
+    console.log("========================================");
+    console.log("🔎 COMPROBACIÓN DE PERMISOS");
+    console.log("👤 Usuario:", interaction.user.tag);
+    console.log("🆔 ID del usuario:", userId);
+    console.log("👑 ID configurado:", ownerId);
+    console.log("✅ ¿Tiene permiso?:", userId === ownerId);
+    console.log("========================================");
+    console.log("");
+
+    return userId === ownerId;
 }
 
 function puedeModerar(interaction, miembro) {
+
     if (!interaction.guild || !miembro) {
         return false;
     }
@@ -116,6 +139,7 @@ function puedeModerar(interaction, miembro) {
 }
 
 function convertirDuracion(entrada) {
+
     if (!entrada) {
         return null;
     }
@@ -142,8 +166,12 @@ function convertirDuracion(entrada) {
 }
 
 async function enviarLog(guild, embed) {
+
     try {
-        const canal = guild.channels.cache.get(CHANNELS.LOGS);
+
+        const canal = guild.channels.cache.get(
+            CHANNELS.LOGS
+        );
 
         if (!canal) {
             console.error(
@@ -153,7 +181,9 @@ async function enviarLog(guild, embed) {
         }
 
         if (!canal.isTextBased()) {
-            console.error("❌ El canal de logs no es de texto.");
+            console.error(
+                "❌ El canal de logs no es de texto."
+            );
             return;
         }
 
@@ -162,7 +192,11 @@ async function enviarLog(guild, embed) {
         });
 
     } catch (error) {
-        console.error("❌ Error enviando log:", error.message);
+
+        console.error(
+            "❌ Error enviando log:",
+            error.message
+        );
     }
 }
 
@@ -171,7 +205,9 @@ async function enviarLog(guild, embed) {
 // =====================================================
 
 async function buscarPanel(canal, customId) {
+
     try {
+
         const mensajes = await canal.messages.fetch({
             limit: 100
         });
@@ -180,12 +216,14 @@ async function buscarPanel(canal, customId) {
             mensaje.author.id === client.user.id &&
             mensaje.components?.some(row =>
                 row.components?.some(
-                    componente => componente.customId === customId
+                    componente =>
+                        componente.customId === customId
                 )
             )
         );
 
     } catch (error) {
+
         console.error(
             `❌ Error buscando panel ${customId}:`,
             error.message
@@ -200,15 +238,19 @@ async function buscarPanel(canal, customId) {
 // =====================================================
 
 async function crearPanelVerificacion() {
+
     try {
+
         const canal = client.channels.cache.get(
             CHANNELS.VERIFICACION
         );
 
         if (!canal || !canal.isTextBased()) {
+
             console.error(
                 "❌ No se encontró el canal de verificación."
             );
+
             return;
         }
 
@@ -218,7 +260,11 @@ async function crearPanelVerificacion() {
         );
 
         if (existente) {
-            console.log("✅ Panel de verificación ya existe.");
+
+            console.log(
+                "✅ Panel de verificación ya existe."
+            );
+
             return;
         }
 
@@ -246,9 +292,12 @@ async function crearPanelVerificacion() {
             components: [row]
         });
 
-        console.log("✅ Panel de verificación enviado.");
+        console.log(
+            "✅ Panel de verificación enviado."
+        );
 
     } catch (error) {
+
         console.error(
             "❌ Error enviando panel de verificación:",
             error
@@ -261,15 +310,19 @@ async function crearPanelVerificacion() {
 // =====================================================
 
 async function crearPanelTickets() {
+
     try {
+
         const canal = client.channels.cache.get(
             CHANNELS.TICKETS
         );
 
         if (!canal || !canal.isTextBased()) {
+
             console.error(
                 "❌ No se encontró el canal de tickets."
             );
+
             return;
         }
 
@@ -279,12 +332,18 @@ async function crearPanelTickets() {
         );
 
         if (existente) {
-            console.log("✅ Panel de tickets ya existe.");
+
+            console.log(
+                "✅ Panel de tickets ya existe."
+            );
+
             return;
         }
 
         const embed = crearEmbed(BOT_COLOR)
-            .setTitle("🎫 CENTRO DE SOPORTE — LA ORDEN MORADA")
+            .setTitle(
+                "🎫 CENTRO DE SOPORTE — LA ORDEN MORADA"
+            )
             .setDescription(
                 "¿**NECESITÁS AYUDA?**\n\n" +
                 "Si tenés algún problema, consulta o necesitás " +
@@ -324,9 +383,12 @@ async function crearPanelTickets() {
             components: [row]
         });
 
-        console.log("✅ Panel de tickets enviado.");
+        console.log(
+            "✅ Panel de tickets enviado."
+        );
 
     } catch (error) {
+
         console.error(
             "❌ Error enviando panel de tickets:",
             error
@@ -501,8 +563,12 @@ const rest = new REST({
 }).setToken(TOKEN);
 
 async function registrarComandos() {
+
     try {
-        console.log("🔄 Registrando comandos...");
+
+        console.log(
+            "🔄 Registrando comandos..."
+        );
 
         await rest.put(
             Routes.applicationCommands(CLIENT_ID),
@@ -511,9 +577,12 @@ async function registrarComandos() {
             }
         );
 
-        console.log("✅ Comandos registrados correctamente.");
+        console.log(
+            "✅ Comandos registrados correctamente."
+        );
 
     } catch (error) {
+
         console.error(
             "❌ Error registrando comandos:",
             error
@@ -533,20 +602,27 @@ client.once("ready", async () => {
     console.log("========================================");
     console.log(`🤖 Bot: ${client.user.tag}`);
     console.log(`🆔 ID: ${client.user.id}`);
+    console.log(`👑 Owner configurado: ${OWNER_USER_ID}`);
     console.log("========================================");
     console.log("");
 
     await registrarComandos();
 
-    // Mostrar estado de canales
     for (const [nombre, id] of Object.entries(CHANNELS)) {
 
         const canal = client.channels.cache.get(id);
 
         if (canal) {
-            console.log(`✅ ${nombre}: ${canal.name}`);
+
+            console.log(
+                `✅ ${nombre}: ${canal.name}`
+            );
+
         } else {
-            console.log(`❌ ${nombre}: NO ENCONTRADO (${id})`);
+
+            console.log(
+                `❌ ${nombre}: NO ENCONTRADO (${id})`
+            );
         }
     }
 
@@ -568,10 +644,6 @@ client.on("guildMemberAdd", async member => {
 
     try {
 
-        // =============================================
-        // BIENVENIDA
-        // =============================================
-
         const canal =
             member.guild.channels.cache.get(
                 CHANNELS.BIENVENIDAS
@@ -580,7 +652,9 @@ client.on("guildMemberAdd", async member => {
         if (canal && canal.isTextBased()) {
 
             const embed = crearEmbed(BOT_COLOR)
-                .setTitle("🟣 BIENVENIDO A LA ORDEN MORADA")
+                .setTitle(
+                    "🟣 BIENVENIDO A LA ORDEN MORADA"
+                )
                 .setDescription(
                     `👋 ¡Bienvenido ${member}!\n\n` +
                     "Nos alegra tenerte con nosotros.\n\n" +
@@ -588,7 +662,6 @@ client.on("guildMemberAdd", async member => {
                     "🛡️ No olvides pasar por el canal de " +
                     "verificación para obtener acceso al servidor."
                 )
-                // SOLO LA BIENVENIDA TIENE LA FOTO
                 .setImage(
                     member.user.displayAvatarURL({
                         size: 1024,
@@ -605,10 +678,6 @@ client.on("guildMemberAdd", async member => {
                 `👋 Bienvenida enviada a ${member.user.tag}`
             );
         }
-
-        // =============================================
-        // LOG DE ENTRADA
-        // =============================================
 
         const logEmbed = crearEmbed(SUCCESS_COLOR)
             .setTitle("📥 NUEVO MIEMBRO")
@@ -643,10 +712,6 @@ client.on("guildMemberAdd", async member => {
             logEmbed
         );
 
-        // =============================================
-        // ANTI-RAID
-        // =============================================
-
         const guildId = member.guild.id;
         const ahora = Date.now();
 
@@ -665,7 +730,6 @@ client.on("guildMemberAdd", async member => {
             entradas
         );
 
-        // 5 entradas en 10 segundos
         if (
             entradas.length >= 5 &&
             !activeRaid.get(guildId)
@@ -701,7 +765,6 @@ client.on("guildMemberAdd", async member => {
                 raidEmbed
             );
 
-            // El estado anti-raid dura 60 segundos
             setTimeout(() => {
 
                 activeRaid.set(
@@ -763,6 +826,7 @@ client.on("guildMemberRemove", async member => {
         );
 
     } catch (error) {
+
         console.error(
             "❌ Error en despedida:",
             error
@@ -789,14 +853,12 @@ client.on("messageCreate", async message => {
         return;
     }
 
-    // El Owner nunca es afectado
     if (
         message.author.id === OWNER_USER_ID
     ) {
         return;
     }
 
-    // Administradores tampoco
     if (
         member.permissions.has(
             PermissionFlagsBits.Administrator
@@ -804,10 +866,6 @@ client.on("messageCreate", async message => {
     ) {
         return;
     }
-
-    // =============================================
-    // ANTI-LINKS
-    // =============================================
 
     const linkRegex =
         /(https?:\/\/|www\.|discord\.gg\/|discord\.com\/invite\/)/i;
@@ -827,7 +885,6 @@ client.on("messageCreate", async message => {
             const ultimo =
                 antiLinkMap.get(cooldownKey) || 0;
 
-            // Evitar mandar 20 avisos al mismo usuario
             if (
                 ahora - ultimo > 5000
             ) {
@@ -853,8 +910,10 @@ client.on("messageCreate", async message => {
                 if (aviso) {
 
                     setTimeout(() => {
+
                         aviso.delete()
                             .catch(() => {});
+
                     }, 4000);
                 }
             }
@@ -886,10 +945,6 @@ client.on("messageCreate", async message => {
         return;
     }
 
-    // =============================================
-    // ANTI-SPAM
-    // =============================================
-
     const key =
         `${message.guild.id}:${message.author.id}`;
 
@@ -911,7 +966,6 @@ client.on("messageCreate", async message => {
         timestamps
     );
 
-    // 6 mensajes en 3 segundos
     if (timestamps.length >= 6) {
 
         spamMap.set(key, []);
@@ -935,8 +989,10 @@ client.on("messageCreate", async message => {
         if (aviso) {
 
             setTimeout(() => {
+
                 aviso.delete()
                     .catch(() => {});
+
             }, 4000);
         }
 
@@ -994,7 +1050,8 @@ client.on("messageDelete", async message => {
         }
 
         const contenido =
-            message.content?.trim() || "Contenido no disponible";
+            message.content?.trim() ||
+            "Contenido no disponible";
 
         const texto =
             contenido.length > 900
@@ -1028,6 +1085,7 @@ client.on("messageDelete", async message => {
         );
 
     } catch (error) {
+
         console.error(
             "❌ Error en messageDelete:",
             error
@@ -1086,7 +1144,9 @@ client.on("interactionCreate", async interaction => {
                     return interaction.reply({
                         embeds: [
                             crearEmbed(INFO_COLOR)
-                                .setTitle("🛡️ YA ESTÁS VERIFICADO")
+                                .setTitle(
+                                    "🛡️ YA ESTÁS VERIFICADO"
+                                )
                                 .setDescription(
                                     "Tu cuenta ya está verificada."
                                 )
@@ -1102,7 +1162,6 @@ client.on("interactionCreate", async interaction => {
                         "Verificación mediante botón"
                     );
 
-                    // SIN IMAGEN
                     const embed =
                         crearEmbed(SUCCESS_COLOR)
                             .setTitle(
@@ -1154,6 +1213,7 @@ client.on("interactionCreate", async interaction => {
                         !interaction.replied &&
                         !interaction.deferred
                     ) {
+
                         await interaction.reply({
                             embeds: [
                                 crearEmbed(ERROR_COLOR)
@@ -1405,9 +1465,11 @@ client.on("interactionCreate", async interaction => {
                 );
 
                 setTimeout(() => {
+
                     interaction.channel
                         .delete()
                         .catch(() => {});
+
                 }, 5000);
 
                 return;
@@ -2431,6 +2493,7 @@ client.on("interactionCreate", async interaction => {
 // =====================================================
 
 client.on("error", error => {
+
     console.error(
         "❌ Discord Client Error:",
         error
@@ -2438,6 +2501,7 @@ client.on("error", error => {
 });
 
 process.on("unhandledRejection", error => {
+
     console.error(
         "❌ Unhandled Rejection:",
         error
@@ -2445,6 +2509,7 @@ process.on("unhandledRejection", error => {
 });
 
 process.on("uncaughtException", error => {
+
     console.error(
         "❌ Uncaught Exception:",
         error
@@ -2456,6 +2521,7 @@ process.on("uncaughtException", error => {
 // =====================================================
 
 if (!TOKEN) {
+
     console.error(
         "❌ No se encontró DISCORD_TOKEN en las variables de entorno."
     );
