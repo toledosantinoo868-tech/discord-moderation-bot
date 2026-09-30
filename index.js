@@ -19,13 +19,14 @@ const {
 // =====================================================
 
 const TOKEN = process.env.DISCORD_TOKEN;
+
+// ID DE LA APLICACIÓN / BOT
 const CLIENT_ID = "1552817688378605650";
 
-// =====================================================
-// IMPORTANTE:
-// PONÉ ACÁ TU ID REAL DE DISCORD
-// =====================================================
+// ID DEL SERVIDOR
+const GUILD_ID = "1504878187383885956";
 
+// ÚNICA PERSONA QUE PUEDE USAR LOS COMANDOS
 const OWNER_USER_ID = "1531489394127536188";
 
 // CANALES FIJOS
@@ -60,7 +61,6 @@ const spamMap = new Map();
 const antiLinkMap = new Map();
 const raidMap = new Map();
 const warnMap = new Map();
-
 const activeRaid = new Map();
 
 // =====================================================
@@ -102,14 +102,18 @@ function esOwner(interaction) {
     console.log("========================================");
     console.log("🔎 COMPROBACIÓN DE PERMISOS");
     console.log("👤 Usuario:", interaction.user.tag);
-    console.log("🆔 ID del usuario:", userId);
-    console.log("👑 ID configurado:", ownerId);
-    console.log("✅ ¿Tiene permiso?:", userId === ownerId);
+    console.log("🆔 ID USUARIO:", userId);
+    console.log("👑 ID OWNER:", ownerId);
+    console.log("🔐 ¿COINCIDEN?:", userId === ownerId);
     console.log("========================================");
     console.log("");
 
     return userId === ownerId;
 }
+
+// =====================================================
+// MODERACIÓN
+// =====================================================
 
 function puedeModerar(interaction, miembro) {
 
@@ -135,8 +139,13 @@ function puedeModerar(interaction, miembro) {
         return false;
     }
 
-    return miembro.roles.highest.position < ejecutor.roles.highest.position;
+    return miembro.roles.highest.position <
+        ejecutor.roles.highest.position;
 }
+
+// =====================================================
+// DURACIÓN
+// =====================================================
 
 function convertirDuracion(entrada) {
 
@@ -164,6 +173,10 @@ function convertirDuracion(entrada) {
 
     return cantidad * multiplicadores[unidad];
 }
+
+// =====================================================
+// LOGS
+// =====================================================
 
 async function enviarLog(guild, embed) {
 
@@ -201,7 +214,7 @@ async function enviarLog(guild, embed) {
 }
 
 // =====================================================
-// BUSCAR MENSAJES EXISTENTES
+// BUSCAR MENSAJES
 // =====================================================
 
 async function buscarPanel(canal, customId) {
@@ -234,7 +247,7 @@ async function buscarPanel(canal, customId) {
 }
 
 // =====================================================
-// PANEL DE VERIFICACIÓN
+// PANEL VERIFICACIÓN
 // =====================================================
 
 async function crearPanelVerificacion() {
@@ -306,7 +319,7 @@ async function crearPanelVerificacion() {
 }
 
 // =====================================================
-// PANEL DE TICKETS
+// PANEL TICKETS
 // =====================================================
 
 async function crearPanelTickets() {
@@ -426,13 +439,17 @@ const commands = [
         .addStringOption(option =>
             option
                 .setName("duracion")
-                .setDescription("Ejemplo: 30s, 5m, 1h, 1d")
+                .setDescription(
+                    "Ejemplo: 30s, 5m, 1h, 1d"
+                )
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("unmute")
-        .setDescription("Quita el timeout a un usuario.")
+        .setDescription(
+            "Quita el timeout a un usuario."
+        )
         .addUserOption(option =>
             option
                 .setName("usuario")
@@ -509,7 +526,9 @@ const commands = [
         .addSubcommand(sub =>
             sub
                 .setName("general")
-                .setDescription("Bloquea todos los canales")
+                .setDescription(
+                    "Bloquea todos los canales"
+                )
         ),
 
     new SlashCommandBuilder()
@@ -518,12 +537,16 @@ const commands = [
         .addSubcommand(sub =>
             sub
                 .setName("canal")
-                .setDescription("Desbloquea este canal")
+                .setDescription(
+                    "Desbloquea este canal"
+                )
         )
         .addSubcommand(sub =>
             sub
                 .setName("general")
-                .setDescription("Desbloquea todos los canales")
+                .setDescription(
+                    "Desbloquea todos los canales"
+                )
         ),
 
     new SlashCommandBuilder()
@@ -544,34 +567,46 @@ const commands = [
         .addChannelOption(option =>
             option
                 .setName("canal")
-                .setDescription("Canal de destino")
+                .setDescription(
+                    "Canal de destino"
+                )
                 .setRequired(false)
         ),
 
     new SlashCommandBuilder()
         .setName("ip")
-        .setDescription("Muestra la IP del servidor.")
+        .setDescription(
+            "Muestra la IP del servidor."
+        )
 
 ].map(command => command.toJSON());
 
 // =====================================================
-// REGISTRO DE COMANDOS
+// REST
 // =====================================================
 
 const rest = new REST({
     version: "10"
 }).setToken(TOKEN);
 
+// =====================================================
+// REGISTRAR COMANDOS
+// =====================================================
+
 async function registrarComandos() {
 
     try {
 
-        console.log(
-            "🔄 Registrando comandos..."
-        );
+        console.log("");
+        console.log("🔄 Registrando comandos...");
+        console.log("🤖 CLIENT ID:", CLIENT_ID);
+        console.log("🏠 GUILD ID:", GUILD_ID);
 
         await rest.put(
-            Routes.applicationCommands(CLIENT_ID),
+            Routes.applicationGuildCommands(
+                CLIENT_ID,
+                GUILD_ID
+            ),
             {
                 body: commands
             }
@@ -579,6 +614,10 @@ async function registrarComandos() {
 
         console.log(
             "✅ Comandos registrados correctamente."
+        );
+
+        console.log(
+            "📌 Registro realizado específicamente en tu servidor."
         );
 
     } catch (error) {
@@ -591,7 +630,7 @@ async function registrarComandos() {
 }
 
 // =====================================================
-// BOT READY
+// READY
 // =====================================================
 
 client.once("ready", async () => {
@@ -601,16 +640,56 @@ client.once("ready", async () => {
     console.log("🟣 LA ORDEN MORADA");
     console.log("========================================");
     console.log(`🤖 Bot: ${client.user.tag}`);
-    console.log(`🆔 ID: ${client.user.id}`);
-    console.log(`👑 Owner configurado: ${OWNER_USER_ID}`);
+    console.log(`🆔 Bot ID: ${client.user.id}`);
+    console.log(`👑 Owner ID: ${OWNER_USER_ID}`);
+    console.log(`🏠 Guild ID: ${GUILD_ID}`);
     console.log("========================================");
     console.log("");
 
+    // COMPROBAR QUE EL BOT CORRESPONDA AL CLIENT ID
+
+    if (client.user.id !== CLIENT_ID) {
+
+        console.error("");
+        console.error(
+            "🚨🚨🚨 ATENCIÓN 🚨🚨🚨"
+        );
+
+        console.error(
+            "El CLIENT_ID configurado NO coincide con el bot conectado."
+        );
+
+        console.error(
+            "CLIENT_ID configurado:",
+            CLIENT_ID
+        );
+
+        console.error(
+            "BOT CONECTADO:",
+            client.user.id
+        );
+
+        console.error("");
+
+    } else {
+
+        console.log(
+            "✅ CLIENT_ID coincide con el bot conectado."
+        );
+    }
+
     await registrarComandos();
 
-    for (const [nombre, id] of Object.entries(CHANNELS)) {
+    console.log("");
 
-        const canal = client.channels.cache.get(id);
+    // CANALES
+
+    for (
+        const [nombre, id] of Object.entries(CHANNELS)
+    ) {
+
+        const canal =
+            client.channels.cache.get(id);
 
         if (canal) {
 
@@ -632,7 +711,9 @@ client.once("ready", async () => {
     await crearPanelTickets();
 
     console.log("");
-    console.log("🟣 Bot completamente iniciado.");
+    console.log(
+        "🟣 Bot completamente iniciado."
+    );
     console.log("");
 });
 
@@ -673,10 +754,6 @@ client.on("guildMemberAdd", async member => {
                 content: `${member}`,
                 embeds: [embed]
             });
-
-            console.log(
-                `👋 Bienvenida enviada a ${member.user.tag}`
-            );
         }
 
         const logEmbed = crearEmbed(SUCCESS_COLOR)
@@ -697,7 +774,8 @@ client.on("guildMemberAdd", async member => {
                 },
                 {
                     name: "👥 Miembros",
-                    value: `${member.guild.memberCount}`,
+                    value:
+                        `${member.guild.memberCount}`,
                     inline: true
                 }
             )
@@ -742,7 +820,9 @@ client.on("guildMemberAdd", async member => {
 
             const raidEmbed =
                 crearEmbed(ERROR_COLOR)
-                    .setTitle("🚨 ANTI-RAID ACTIVADO")
+                    .setTitle(
+                        "🚨 ANTI-RAID ACTIVADO"
+                    )
                     .setDescription(
                         "Se detectaron múltiples entradas " +
                         "al servidor en un período muy corto."
@@ -898,7 +978,9 @@ client.on("messageCreate", async message => {
                     await message.channel.send({
                         embeds: [
                             crearEmbed(WARNING_COLOR)
-                                .setTitle("🔗 ENLACE BLOQUEADO")
+                                .setTitle(
+                                    "🔗 ENLACE BLOQUEADO"
+                                )
                                 .setDescription(
                                     `${message.author}, los enlaces ` +
                                     "no están permitidos en este canal."
@@ -925,13 +1007,11 @@ client.on("messageCreate", async message => {
                     .setDescription(
                         `Se eliminó un enlace enviado por ${message.author}.`
                     )
-                    .addFields(
-                        {
-                            name: "📍 Canal",
-                            value: `${message.channel}`,
-                            inline: true
-                        }
-                    )
+                    .addFields({
+                        name: "📍 Canal",
+                        value: `${message.channel}`,
+                        inline: true
+                    })
             );
 
         } catch (error) {
@@ -1006,7 +1086,9 @@ client.on("messageCreate", async message => {
             await enviarLog(
                 message.guild,
                 crearEmbed(ERROR_COLOR)
-                    .setTitle("🚨 ANTI-SPAM ACTIVADO")
+                    .setTitle(
+                        "🚨 ANTI-SPAM ACTIVADO"
+                    )
                     .setDescription(
                         `${message.author} recibió un timeout automático.`
                     )
@@ -1059,7 +1141,9 @@ client.on("messageDelete", async message => {
                 : contenido;
 
         const embed = crearEmbed(ERROR_COLOR)
-            .setTitle("🗑️ MENSAJE ELIMINADO")
+            .setTitle(
+                "🗑️ MENSAJE ELIMINADO"
+            )
             .addFields(
                 {
                     name: "👤 Usuario",
@@ -1100,6 +1184,44 @@ client.on("messageDelete", async message => {
 client.on("interactionCreate", async interaction => {
 
     try {
+
+        // =================================================
+        // DEBUG
+        // =================================================
+
+        if (interaction.isChatInputCommand()) {
+
+            console.log("");
+            console.log("========================================");
+            console.log("📥 COMANDO RECIBIDO");
+            console.log("👤 Usuario:", interaction.user.tag);
+            console.log(
+                "🆔 ID USUARIO:",
+                interaction.user.id
+            );
+            console.log(
+                "🤖 Bot:",
+                client.user.tag
+            );
+            console.log(
+                "🆔 ID BOT:",
+                client.user.id
+            );
+            console.log(
+                "🏠 Servidor:",
+                interaction.guild?.name
+            );
+            console.log(
+                "🆔 SERVIDOR ID:",
+                interaction.guild?.id
+            );
+            console.log(
+                "📌 Comando:",
+                interaction.commandName
+            );
+            console.log("========================================");
+            console.log("");
+        }
 
         // =================================================
         // BOTONES
@@ -1286,13 +1408,15 @@ client.on("interactionCreate", async interaction => {
                         parent: categoria,
                         permissionOverwrites: [
                             {
-                                id: guild.roles.everyone.id,
+                                id:
+                                    guild.roles.everyone.id,
                                 deny: [
                                     PermissionFlagsBits.ViewChannel
                                 ]
                             },
                             {
-                                id: interaction.user.id,
+                                id:
+                                    interaction.user.id,
                                 allow: [
                                     PermissionFlagsBits.ViewChannel,
                                     PermissionFlagsBits.SendMessages,
@@ -1332,13 +1456,10 @@ client.on("interactionCreate", async interaction => {
                             "Tu ticket fue creado correctamente. " +
                             "Explicá detalladamente el motivo de tu " +
                             "consulta para que el Staff pueda ayudarte.\n\n" +
-
                             "📌 Si corresponde, podés enviar capturas, " +
                             "IDs, nombres de usuarios u otra información " +
                             "que ayude a resolver el problema.\n\n" +
-
                             "🛡️ Un miembro del Staff atenderá tu solicitud.\n\n" +
-
                             "Cuando el problema esté solucionado, utilizá " +
                             "el botón para cerrar el ticket."
                         );
@@ -1424,9 +1545,7 @@ client.on("interactionCreate", async interaction => {
                     return interaction.reply({
                         embeds: [
                             crearEmbed(ERROR_COLOR)
-                                .setTitle(
-                                    "❌ ERROR"
-                                )
+                                .setTitle("❌ ERROR")
                                 .setDescription(
                                     "Este canal no es un ticket."
                                 )
@@ -1503,10 +1622,55 @@ client.on("interactionCreate", async interaction => {
         }
 
         // =================================================
+        // COMPROBAR SERVIDOR
+        // =================================================
+
+        if (interaction.guild.id !== GUILD_ID) {
+
+            console.log(
+                "❌ Comando ejecutado en un servidor no autorizado:",
+                interaction.guild.id
+            );
+
+            return interaction.reply({
+                embeds: [
+                    crearEmbed(ERROR_COLOR)
+                        .setTitle(
+                            "❌ SERVIDOR NO AUTORIZADO"
+                        )
+                        .setDescription(
+                            "Este bot no está configurado para utilizarse en este servidor."
+                        )
+                ],
+                ephemeral: true
+            });
+        }
+
+        // =================================================
         // SOLO OWNER
         // =================================================
 
-        if (!esOwner(interaction)) {
+        console.log(
+            "🔐 Verificando permisos del comando..."
+        );
+
+        const tienePermiso =
+            esOwner(interaction);
+
+        console.log(
+            "🔐 Resultado:",
+            tienePermiso
+                ? "PERMITIDO ✅"
+                : "DENEGADO ❌"
+        );
+
+        if (!tienePermiso) {
+
+            console.log(
+                "❌ Comando bloqueado para:",
+                interaction.user.tag,
+                interaction.user.id
+            );
 
             return interaction.reply({
                 embeds: [
@@ -1517,10 +1681,27 @@ client.on("interactionCreate", async interaction => {
                         .setDescription(
                             "No tenés permiso para utilizar los comandos de este bot."
                         )
+                        .addFields(
+                            {
+                                name: "🆔 Tu ID",
+                                value:
+                                    `\`${interaction.user.id}\``
+                            },
+                            {
+                                name: "👑 ID autorizado",
+                                value:
+                                    `\`${OWNER_USER_ID}\``
+                            }
+                        )
                 ],
                 ephemeral: true
             });
         }
+
+        console.log(
+            "✅ Permiso concedido a:",
+            interaction.user.tag
+        );
 
         // =================================================
         // /IP
@@ -2475,9 +2656,7 @@ client.on("interactionCreate", async interaction => {
             await interaction.reply({
                 embeds: [
                     crearEmbed(ERROR_COLOR)
-                        .setTitle(
-                            "❌ ERROR"
-                        )
+                        .setTitle("❌ ERROR")
                         .setDescription(
                             "Ocurrió un error al ejecutar la acción."
                         )
